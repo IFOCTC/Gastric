@@ -1,0 +1,640 @@
+---
+title: "11_New_Patients_Classification"
+author: "Davide Mascolo"
+date: "2024-12-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Load Data
+df_degs <- read.csv(paste0(output_path, "/df_volcano_degs_08.csv"))
+df_tpm  <- read_tsv(paste0(data_path, "/salmon.merged.gene_tpm.tsv"), show_col_types = FALSE)
+df_clinical <- read_excel(paste0(data_path, "/stomaci_wes_all.xlsx"))
+ids_marcello <- c("IRE-012", "IRE-016", "IRE-017", "IRE-023", "IRE-034", "IRE-039",
+                  "IRE-044", "IRE-048", "IRE-053", "IRE-056", "IRE-059", "IRE-060",
+                  "IRE-061", "IRE-063", "IRE-067", "IRE-068", "IRE-071", "IRE-075",
+                  "IRE-081", "IRE-083", "IRE-086", "IRE-090", "IRE-098", "IRE-100",
+                  "IRE-104", "IRE-105", "IRE-107", "IRE-110", "IRE-111", "IRE-115",
+                  "IRE-120", "IRE-121", "IRE-125", "IRE-128", "IRE-130", "IRE-134",
+                  "IRE-135", "IRE-136", "IRE-137", "IRE-138", "IRE-139", "IRE-141",
+                  "IRE-142", "IRE-143", "IRE-144", "IRE-145", "IRE-148", "IRE-149",
+                  "IRE-151", "IRE-153", "IRE-154", "IRE-155", "IRE-156", "IRE-157",
+                  "IRE-158", "IRE-159", "IRE-160", "IRE-161", "IRE-162", "IRE-163",
+                  "IRE-164", "IRE-165", "IRE-166", "IRE-167", "IRE-168", "IRE-169",
+                  "IRE-170", "IRE-171", "IRE-173", "IRE-174", "IRE-175", "IRE-176",
+                  "IRE-177", "IRE-178", "IRE-179", "IRE-180", "IRE-181", "IRE-182",
+                  "IRE-183", "IRE-184", "IRE-185", "IRE-186", "IRE-187", "IRE-188",
+                  "IRE-189", "IRE-190", "IRE-191", "IRE-192", "IRE-193", "IRE-194",
+                  "IRE-195", "IRE-196", "IRE-197", "IRE-198", "IRE-199", "IRE-201",
+                  "IRE-202", "IRE-203", "IRE-204", "IRE-205", "IRE-206", "IRE-207",
+                  "IRE-208", "IRE-209", "IRE-210", "IRE-211", "IRE-213", "IRE-214",
+                  "IRE-215", "IRE-216", "IRE-217", "IRE-219", "IRE-220", "IRE-221",
+                  "IRE-222", "IRE-224", "IRE-225", "IRE-227", "IRE-228", "IRE-229",
+                  "IRE-230", "IRE-231", "IRE-234", "IRE-235", "IRE-236", "IRE-237",
+                  "IRE-238", "IRE-239", "IRE-242", "IRE-244", "IRE-246", "IRE-247",
+                  "IRE-248", "IRE-249", "IRE-251", "IRE-253", "IRE-254", "IRE-255",
+                  "IRE-256", "IRE-258", "IRE-260", "IRE-261", "IRE-262", "IRE-263",
+                  "IRE-264", "IRE-265", "IRE-267", "IRE-268", "IRE-269", "IRE-270",
+                  "IRE-271", "IRE-272", "IRE-276", "IRE-277", "IRE-280", "IRE-281",
+                  "IRE-282", "IRE-284", "IRE-285", "IRE-287", "IRE-288", "IRE-289",
+                  "IRE-290", "IRE-291", "IRE-292", "IRE-293", "IRE-294", "IRE-295",
+                  "IRE-296", "IRE-297", "IRE-298", "IRE-299", "IRE-300", "IRE-301",
+                  "IRE-302")
+```
+
+```{r}
+## Select only tumor patients in TPM and Clinical
+ids_tpm <- df_tpm %>% 
+  dplyr::select(matches("T$"))
+ids_tpm <- colnames(ids_tpm)
+ids_tpm <- cbind(ids_tpm)
+colnames(ids_tpm) <- "ID"
+ids_tpm[,1] <- gsub("\\.1T$", "", ids_tpm[,1])
+ids_tpm[,1] <- gsub("\\.", "-", ids_tpm[,1])
+
+## Check ID patients
+cat("IDs Marcello: ", length(ids_marcello))
+cat("IDs Clinical: ", length(df_clinical$ID))
+cat("IDs Tpm: ", length(ids_tpm))
+
+## IDs missing comparing marcello's patients and df final survival id
+ids_missing <- c("IRE-056", "IRE-104", "IRE-105",
+                 "IRE-107", "IRE-136", "IRE-153",
+                 "IRE-157", "IRE-202", "IRE-291")
+```
+
+```{r}
+## Clinical Filtering
+columns_survival <- c("ID", "OS_time", "OS_Event", "PFS_time",
+                      "PFS_event", "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI")
+## Consider only some columns and patients with treatment
+df_clinical_survival <- df_clinical %>% 
+  dplyr::select(all_of(columns_survival))
+
+## Patients classification:
+## Fast Progressor (PFS <= 6 months & PFS Event == 1), Long Responder (PFS >= 12 months),
+## Conventional Responder (remaining part). 
+df_clinical_survival <- df_clinical_survival %>% 
+  mutate(Response = case_when(PFS_time <= 6 & PFS_event == 1 ~ "Fast Progressor",
+                              PFS_time >= 12  ~ "Long Responder",
+                              TRUE ~ "Conventional Responder"),
+         OS_Status = case_when(OS_time <= 6 & OS_Event == 1 ~ "Short Survival",
+                               OS_time >= 24  ~ "Long Survival",
+                              TRUE ~ "Conventional Survival"))
+
+## This is create to make survival analysis above whole population
+df_clinical_filtered <- df_clinical %>% 
+  dplyr::select(all_of(columns_survival))
+## For survival analysis
+df_clinical_filtered <- df_clinical_survival %>% 
+  mutate(Response = case_when(PFS_time <= 6 & PFS_event == 1 ~ "Fast Progressor",
+                              PFS_time >= 12  ~ "Long Responder",
+                              TRUE ~ "Conventional Responder"),
+         OS_Status = case_when(OS_time <= 6 & OS_Event == 1 ~ "Short Survival",
+                               OS_time >= 24  ~ "Long Survival",
+                              TRUE ~ "Conventional Survival"))
+
+## Plot whole population
+ggplot(df_clinical_filtered, aes(x = OS_Status)) +
+  geom_bar(aes(fill = OS_Status)) +
+  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+  labs(title = "Overall Status Distribution", x = "", y = "Count", fill = "OS Status") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#F39C12", "#3498DB", "#E74C3C"))
+```
+
+
+```{r}
+## Wrangling TPM
+df_tpm$gene_id <- NULL
+genes_down_regulated <- df_degs %>% 
+  filter(Expression == "Down-regulated")
+
+## Filtering on genes considering DEGs Up downregulated and tumor patients
+df_tpm_filtered <- df_tpm %>% 
+  filter(df_tpm$gene_name %in% genes_down_regulated$X) %>% 
+  dplyr::select(gene_name, matches("T$"))
+
+# ## TPM Filtering
+row_num_t   <- 30
+min_samples <- 41
+df_tpm_filtered <- df_tpm_filtered[rowSums(df_tpm_filtered >= row_num_t) >= min_samples, ]
+
+## Transpose ---> Patient x Gene
+gene_names <- df_tpm_filtered$gene_name
+df_tpm_filtered$gene_name <- NULL
+df_tpm_filtered <- data.frame(df_tpm_filtered)
+rownames(df_tpm_filtered) <- make.names(gene_names, unique = TRUE)
+## Transpose
+df_tpm_filtered <- t(df_tpm_filtered)
+df_tpm_filtered <- data.frame(df_tpm_filtered)
+dim(df_tpm_filtered)
+```
+
+```{r}
+## Network Approach
+
+## 05 - Define a function that computes the hubs of the network
+compute_adjacency <- function(data, cor_type = NULL){
+  ## Input:  Expression Data
+  ## Output: Adjacency matrix
+  
+  ## Correlation matrix 
+  cor_mat       <- cor(t(data), method = cor_type)
+  diag(cor_mat) <- 0
+  ## Correlation matrix (p-value)
+  cor_padj <- corr.p(cor_mat, nrow(cor_mat),
+                     adjust = "fdr", ci = FALSE)$p
+  cor_padj[lower.tri(cor_padj)] <- t(cor_padj)[lower.tri(cor_padj)]
+  ## Build adjacency matrix
+  adj_mat_1 <- ifelse(cor_mat >= 0.3, 1,
+                      ifelse(cor_mat <= -0.3, -1, 0))
+  adj_mat_2 <- ifelse(abs(cor_padj) > 0.05, 0, 1) 
+  adj_mat   <- adj_mat_1 * adj_mat_2
+  ## Return
+  return(adj_mat)
+}
+
+## 06 - Define a function that returns the list of the hubs
+compute_hubs <- function(adj_matrix, mart = mart_names, quant){
+  ## Input: Adjacency Matrix, mart
+  ## Output: List of hubs, Degree, Level of quantile
+  
+  ## Compute degree
+  degree <- sort(rowSums(abs(adj_matrix)), decreasing = TRUE)
+  ## Compute quantile
+  q <- quantile(degree[degree > 0], quant)
+  ## Find the hubs (1-q% of the nodes with highest degree values)
+  hubs <- degree[degree >= q]
+  ## Let's order them by degree
+  hubs_ord <- sort(hubs, decreasing = TRUE)
+  ## Check names
+  final_hubs <- hubs_ord
+  ## Return
+  return(list("code_hubs" = hubs,
+              "final_hubs" = final_hubs,
+              "degree" = degree,
+              "q" = q))}
+
+## Build Adjacency Matrix
+adj_matrix <- compute_adjacency(t(df_tpm_filtered),
+                                cor_type = "pearson")
+
+## Compute hubs
+hubs <- compute_hubs(adj_matrix, quant = 0.5)
+
+## Degree distribution in order to check if the network is scale free
+df1 <- data.frame(cbind(hubs$degree))
+colnames(df1) <- "Degree"
+(hist_plot <- ggplot(df1, aes(x = Degree)) +
+    geom_histogram(fill = "steelblue", alpha = 07, bins = 20) +
+    ggtitle("Degree Distribution") +
+    xlab("Degree") +
+    ylab("Frequency") +
+    theme_minimal())
+
+## Compute Network
+net <- network(adj_matrix, matrix.type = "adjacency",
+               ignore.eval = FALSE, names.eval = "weights",
+               directed = FALSE)
+
+## Compute density
+network.density(net)
+## Giant Component
+nrow(component.largest(net, result = "graph"))
+## How many positive/negative correlations?
+sum(adj_matrix == 1)
+sum(adj_matrix == -1)
+sum(adj_matrix == 0)
+
+## Plot Resistant Hubs
+plot_graph(net, hubs$code_hubs,
+           title = "Differential Co-Expression Network Hubs")
+
+## Identify the hubs
+length(hubs$code_hubs)
+hubs$code_hubs
+names(hubs$code_hubs)
+```
+
+
+```{r}
+## Compute mean for each patient (column)
+df_tpm_filtered <- df_tpm_filtered %>%
+  mutate(Mean = rowMeans(across(everything()), na.rm = TRUE))
+```
+
+```{r}
+## Compute 75% (Q3) on mean dataset
+q3_value <- quantile(df_tpm_filtered$Mean, 0.75, na.rm = TRUE)
+median_value <- median(df_tpm_filtered$Mean, na.rm = TRUE)
+## Plot
+ggplot(df_tpm_filtered, aes(x = Mean, y = after_stat(count))) +
+  geom_histogram(fill = "orange", color = "black", bins = 30) +
+  geom_vline(aes(xintercept = median_value), color = "steelblue",
+             linetype = "dashed", linewidth = 1) +
+  ggtitle("Mean Patients Distribution x Gene") +
+  xlab("Mean") +
+  ylab("Count") +
+  theme_minimal()
+```
+
+```{r}
+## Considering the Q3 value, it is possible to classify the patients considering their gene expression level
+
+## Thresholding
+df_tpm_filtered <- df_tpm_filtered %>%
+  mutate(Condition_Q3 = ifelse(Mean >= q3_value, "High", "Low"),
+         Condition_Mean = ifelse(Mean >= median_value, "High", "Low"))
+
+## Check
+dim(df_tpm_filtered)
+```
+
+
+```{r}
+## Add one column for merge
+df_tpm_filtered$ID <- rownames(df_tpm_filtered)
+df_tpm_filtered <- df_tpm_filtered[, c("ID",
+                                       colnames(df_tpm_filtered)[colnames(df_tpm_filtered) != "ID"])]
+## Operations before merging on ID tpm
+df_tpm_filtered$ID <- gsub("\\.1T$", "", df_tpm_filtered$ID)
+df_tpm_filtered$ID <- gsub("\\.", "-", df_tpm_filtered$ID)
+
+## Check
+dim(df_tpm_filtered)
+
+## Merge
+df_final_survival <- merge(df_clinical_filtered, df_tpm_filtered, by = "ID")
+dim(df_final_survival)
+df_final_survival <- df_final_survival %>% 
+  mutate(Response = case_when(PFS_time <= 6 & PFS_event == 1 ~ "Fast Progressor",
+                              PFS_time >= 12  ~ "Long Responder",
+                              TRUE ~ "Conventional Responder"),
+         OS_Status = case_when(OS_time <= 6 & OS_Event == 1 ~ "Short Survival",
+                               OS_time >= 24  ~ "Long Survival",
+                              TRUE ~ "Conventional Survival"))
+
+## Plot
+ggplot(df_final_survival, aes(x = OS_Status)) +
+  geom_bar(aes(fill = OS_Status)) +
+  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+  labs(title = "Overall Status Distribution", x = "", y = "Count", fill = "OS Status") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#F39C12", "#3498DB", "#E74C3C"))
+```
+
+```{r, warning = FALSE}
+## Survival Analysis
+max_months <- 48
+
+## OS Survival
+fit_os <- survfit(Surv(OS_time, OS_Event) ~ OS_Status,
+                  data = df_clinical_filtered)
+## Plot
+ggsurv_os <- ggsurvplot(fit_os, data = df_clinical_filtered,
+             pval = TRUE, conf.int = FALSE, palette = c("#F39C12", "#3498DB", "#E74C3C"),
+             xlim = c(0, max_months), title = "Overall Survival Analysis",
+             xlab = "Months",
+             ylab = "OS Probability", break.time.by = 4,
+             ggtheme = theme_light(), risk.table = TRUE,
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = TRUE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+ggsurv_os
+
+## PFS Survival
+fit_pfs <- survfit(Surv(PFS_time, as.numeric(PFS_event)) ~ OS_Status,
+                   data = df_clinical_filtered)
+## Plot
+ggsurv_fps <- ggsurvplot(fit_pfs, data = df_clinical_filtered,
+             pval = TRUE, conf.int = FALSE, palette = c("#F39C12", "#3498DB", "#E74C3C"),
+             xlim = c(0, max_months), title = "Progression Free Survival Analysis",
+             xlab = "Months", ylab = "PFS Probability", break.time.by = 4,
+             ggtheme = theme_light(), risk.table = TRUE,
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = TRUE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+ggsurv_fps
+```
+
+```{r}
+## Survival Analysis for single gene
+
+## OWN - OS
+max_months <- 48
+output_folder_os <- "C:/Users/david/Documents/IFO/Gastric_TCGA/Output_Res/Images/Survival_Test_Single_Gene/198/OWN_OS_2Groups"
+g  <- colnames(df_final_survival[,11:208])  ## Get the column names
+for(i in seq_along(g)){  ## Iterate over the column names by index
+  gene_col <- g[i]  ## Get the current gene column name
+  ## Create Group based on the median of the Mean column
+  df_final_survival$Group <- ifelse(df_final_survival[[gene_col]] >=
+                          median(df_final_survival[[gene_col]], na.rm = TRUE), 
+                          "High", "Low")
+  ## Perform survival analysis
+  fit <- survfit(Surv(OS_time, OS_Event) ~ Group, data = df_final_survival)
+  # pairwise_pvalues_os_own <- pairwise_survdiff(Surv(OS_time, as.integer(OS_Event)) ~ Group,
+  #                                              data = df_final_survival,
+  #                                              p.adjust.method = "none")
+  # pairwise_pvalues_os_own_pvals <- pairwise_pvalues_os_own$p.value
+  # pairwise_pvalues_os_own_pvals_text <- paste0("Pairwise p-values:\n",
+  #                             "High vs Medium: ", signif(pairwise_pvalues_os_own_pvals[2, 2], 3), "\n",
+  #                             "High vs Low: ", signif(pairwise_pvalues_os_own_pvals[2,1], 3), "\n",
+  #                             "Medium vs Low: ", signif(pairwise_pvalues_os_own_pvals[1, 1], 3))
+  ## Plot survival curve with dynamic title
+  p <- ggsurvplot(fit, title = gene_col,  pval = TRUE, conf.int = FALSE,
+                  risk.table = TRUE, risk.table.y.text.col = TRUE,
+                  palette = c("#3498DB", "#F39C12", "#E74C3C"),
+                  xlab = "Time in Months",  ylab = "OS Probability",
+                  break.time.by = 4, ggtheme = theme_light(),
+                  risk.table.height = 0.25,
+                  surv.median.line = "hv", xlim = c(0, 48))
+  # p$plot <- p$plot +
+  #   annotate("text", x = max_months - 20, y = 0.8,
+  #            label = pairwise_pvalues_os_own_pvals_text, size = 3, hjust = 0)
+  ## Save
+  output_file <- paste0(output_folder_os, "/", gene_col, "_Median_198_OS_survival_plot.png")
+  ggsave(output_file, plot = p$plot, width = 8, height = 6)
+}
+
+## OWN - PFS
+output_folder_pfs <- "C:/Users/david/Documents/IFO/Gastric_TCGA/Output_Res/Images/Survival_Test_Single_Gene/198/OWN_PFS_2Groups"
+for(i in seq_along(g)){  ## Iterate over the column names by index
+  gene_col <- g[i]  ## Get the current gene column name
+  ## Create Group based on the median of the Mean column
+  # df_final_survival$Group <- cut(df_final_survival[[gene_col]],
+  #                                         breaks = quantile(df_final_survival[[gene_col]],
+  #                                                           probs = c(0, 1/3, 2/3, 1)),
+  #                                         labels = c("Low", "Medium", "High"),
+  #                                         include.lowest = TRUE)
+  df_final_survival$Group <- ifelse(df_final_survival[[gene_col]] >=
+                          median(df_final_survival[[gene_col]], na.rm = TRUE), 
+                          "High", "Low")
+  ## Perform survival analysis
+  fit <- survfit(Surv(PFS_time, as.integer(PFS_event)) ~ Group, data = df_final_survival)
+  # pairwise_pvalues_pfs_own <- pairwise_survdiff(Surv(PFS_time, as.integer(PFS_event)) ~ Group,
+  #                                              data = df_final_survival,
+  #                                              p.adjust.method = "none")
+  # pairwise_pvalues_pfs_own_pvals <- pairwise_pvalues_pfs_own$p.value
+  # pairwise_pvalues_pfs_own_pvals_pvals_text <- paste0("Pairwise p-values:\n",
+  #                             "High vs Medium: ", signif(pairwise_pvalues_pfs_own_pvals[2, 2], 3), "\n",
+  #                             "High vs Low: ", signif(pairwise_pvalues_pfs_own_pvals[2,1], 3), "\n",
+  #                             "Medium vs Low: ", signif(pairwise_pvalues_pfs_own_pvals[1, 1], 3))
+  ## Plot survival curve with dynamic title
+  p <- ggsurvplot(fit, title = gene_col,  pval = TRUE, conf.int = FALSE,
+                  risk.table = TRUE, risk.table.y.text.col = TRUE,
+                  palette = c("#3498DB", "#F39C12", "#E74C3C"),
+                  xlab = "Time in Months",  ylab = "PFS Probability",
+                  break.time.by = 4, ggtheme = theme_light(),
+                  risk.table.height = 0.25,
+                  surv.median.line = "hv", xlim = c(0, 48))
+  # p$plot <- p$plot +
+  #   annotate("text", x = max_months - 20, y = 0.8,
+  #            label = pairwise_pvalues_pfs_own_pvals_pvals_text, size = 3, hjust = 0)
+  ## Save
+  output_file <- paste0(output_folder_pfs, "/", gene_col, "_Median_198_PFS_survival_plot.png")
+  ggsave(output_file, plot = p$plot, width = 8, height = 6)
+}
+
+## ******************************************************************************************
+## TCGA - OS
+## Testing single gene also for TCGA
+data_path_tcga <- "C:/Users/david/Documents/IFO/Gastric_TCGA/Data"
+df_clinical_tcga <- read_tsv(paste0(data_path_tcga, "/TCGA-STAD.clinical.tsv"),
+                             show_col_types = FALSE)
+df_survival_tcga <- read_tsv(paste0(data_path_tcga, "/TCGA-STAD.survival.tsv"),
+                             show_col_types = FALSE)
+df_tpm_tcga      <- read_tsv(paste0(data_path_tcga, "/TCGA-STAD.star_tpm.tsv"),
+                             show_col_types = FALSE)
+## Load data
+df_tpm_own <- read_tsv(paste0(data_path, "/salmon.merged.gene_tpm.tsv"),
+                       show_col_types = FALSE)
+
+## Filtering stage
+df_clinical_tcga <- df_clinical_tcga %>%
+  filter(ajcc_pathologic_stage.diagnoses %in% c("Stage III", "Stage IIIA",
+                                                "Stage IIIB", "Stage IIIC", "Stage IV"))
+ids_df_clinical_tcga <- df_clinical_tcga$sample
+df_survival_tcga     <- df_survival_tcga %>%
+  filter(sample %in% ids_df_clinical_tcga)
+## Filtering
+top_genes_id <- df_tpm_own %>%
+  dplyr::select(gene_id, gene_name) %>%
+  filter(gene_name %in% g)
+## Wrangling ensembl id gene name
+Ensembl_ID <- df_tpm_tcga$Ensembl_ID
+Ensembl_ID_cleaned <- sub("\\..*", "", Ensembl_ID)
+df_tpm_tcga_cleaned <- df_tpm_tcga
+df_tpm_tcga_cleaned$Ensembl_ID <- Ensembl_ID_cleaned
+## Check
+top_genes_id$gene_id %in% Ensembl_ID_cleaned
+## Filtering
+df_tpm_tcga_cleaned <- df_tpm_tcga_cleaned %>%
+  filter(Ensembl_ID %in% top_genes_id$gene_id)
+## Add gene name
+names(df_tpm_tcga_cleaned)[names(df_tpm_tcga_cleaned) == "Ensembl_ID"] <- "gene_id"
+df_tpm_tcga_cleaned <- merge(df_tpm_tcga_cleaned, top_genes_id, by = "gene_id")
+rownames(df_tpm_tcga_cleaned) <- make.names(df_tpm_tcga_cleaned$gene_name, unique = TRUE)
+## Transpose
+df_tpm_tcga_cleaned <- t(df_tpm_tcga_cleaned)
+df_tpm_tcga_cleaned <- data.frame(df_tpm_tcga_cleaned)
+selected_rownames_tcga <- rownames(df_tpm_tcga_cleaned)[grep("01A$", rownames(df_tpm_tcga_cleaned))]
+## Filtering
+df_tpm_tcga_cleaned_tumor <- df_tpm_tcga_cleaned %>%
+  dplyr::filter(rownames(df_tpm_tcga_cleaned) %in% selected_rownames_tcga)
+## Remove the last part of barcode
+selected_rownames_cleaned_tcga <- sub("-[^-]+$", "", rownames(df_tpm_tcga_cleaned_tumor))
+rownames(df_tpm_tcga_cleaned_tumor) <- selected_rownames_cleaned_tcga
+## Merge
+df_tpm_tcga_cleaned_tumor$`_PATIENT` <- rownames(df_tpm_tcga_cleaned_tumor)
+df_tpm_tcga_cleaned_filtered_merged  <- merge(df_tpm_tcga_cleaned_tumor,
+                                              df_survival_tcga, by = "_PATIENT")
+df_tpm_tcga_cleaned_filtered_merged <- data.frame(df_tpm_tcga_cleaned_filtered_merged)
+
+
+## Survival analysis
+max_months <- 48
+output_folder_os_tcga <- "C:/Users/david/Documents/IFO/Gastric_TCGA/Output_Res/Images/Survival_Test_Single_Gene/198/TCGA_OS_2Groups"
+## OS
+g <- colnames(df_tpm_tcga_cleaned_filtered_merged[,2:195])  ## Get the column names
+df_tpm_tcga_cleaned_filtered_merged <- df_tpm_tcga_cleaned_filtered_merged %>%
+  mutate(across(all_of(g), as.numeric))
+for(i in seq_along(g)){  ## Iterate over the column names by index
+  gene_col <- g[i]  ## Get the current gene column name
+  ## Create Group based on the median of the Mean column
+  # df_tpm_tcga_cleaned_filtered_merged$Group <- cut(df_tpm_tcga_cleaned_filtered_merged[[gene_col]],                                   breaks = quantile(df_tpm_tcga_cleaned_filtered_merged[[gene_col]],
+  #                                         probs = c(0, 1/3, 2/3, 1)),
+  #                                         labels = c("Low", "Medium", "High"),
+  #                                         include.lowest = TRUE)
+  df_tpm_tcga_cleaned_filtered_merged$Group <- ifelse(df_tpm_tcga_cleaned_filtered_merged[[gene_col]]
+                      >= median(df_tpm_tcga_cleaned_filtered_merged[[gene_col]], na.rm = TRUE), 
+                      "High", "Low")
+
+  ## Perform survival analysis
+  fit <- survfit(Surv(OS.time/30, OS) ~ Group, data = df_tpm_tcga_cleaned_filtered_merged)
+  # pairwise_pvalues_os_tcga <- pairwise_survdiff(Surv(OS.time/30, OS) ~ Group,
+  #                                               data = df_tpm_tcga_cleaned_filtered_merged,
+  #                                               p.adjust.method = "none")
+  # pairwise_pvalues_os_tcga_pvals <- pairwise_pvalues_os_tcga$p.value
+  # pairwise_pvalues_os_tcga_pvals_text <- paste0("Pairwise p-values:\n",
+  #                       "High vs Medium: ", signif(pairwise_pvalues_os_tcga_pvals[2, 2], 3), "\n",
+  #                       "High vs Low: ", signif(pairwise_pvalues_os_tcga_pvals[2, 1], 3), "\n",
+  #                       "Medium vs Low: ", signif(pairwise_pvalues_os_tcga_pvals[1, 1], 3))
+  ## Plot survival curve with dynamic title
+  p <- ggsurvplot(fit, title = gene_col,  pval = TRUE, conf.int = FALSE,
+                  risk.table = TRUE, risk.table.y.text.col = TRUE,
+                  palette = c("#3498DB", "#F39C12", "#E74C3C"),
+                  xlab = "Time in Months",  ylab = "OS Probability",
+                  break.time.by = 4, ggtheme = theme_light(),
+                  risk.table.height = 0.25,
+                  surv.median.line = "hv", xlim = c(0, 48))
+  # p$plot <- p$plot +
+  #   annotate("text", x = max_months - 20, y = 0.8,
+  #            label = pairwise_pvalues_os_tcga_pvals_text, size = 3, hjust = 0)
+  ## Save
+  output_file <- paste0(output_folder_os_tcga, "/", gene_col, "_Median_TCGA_198_OS_survival_plot.png")
+  ggsave(output_file, plot = p$plot, width = 8, height = 6)
+}
+```
+
+
+```{r}
+## Select columns to exclude for testing
+columns_to_exlude <- c("Mean", "Condition_Mean", "Condition_Q3")
+
+## Filter - Exclude also the conventiona responder
+## Variable: Response
+df_final_survival_filtered <- df_final_survival %>% 
+  dplyr::select(-all_of(columns_to_exlude)) %>% 
+  filter(OS_Status != "Conventional Survival")
+
+## Test
+res <- df_final_survival_filtered %>%  
+  kruskal_test_on_genes(condition_col = "OS_Status") %>% 
+  filter(p_value <= 0.05) 
+
+## Apply log transformation
+## Step 1: Define the columns to exclude
+exclude_cols <- c("ID", "OS_time", "OS_Event", "PFS_time", "PFS_event", 
+                  "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI", "Response", "OS_Status")
+
+## Step 2: Select all columns except the excluded ones, and apply log2(tpm+1) transformation
+df_transformed <- df_final_survival_filtered %>%
+  dplyr::select(-all_of(exclude_cols)) %>%
+  mutate(across(everything(), ~ log2(. + 1)))
+
+## Step 3: Re-attach the excluded columns
+df_final_transformed <- df_final_survival_filtered %>%
+  dplyr::select(all_of(exclude_cols)) %>%
+  bind_cols(df_transformed)
+
+## Plot
+plots_boxplot <- plot_kruskal_boxplot(df_final_transformed, "OS_Status")
+```
+
+```{r}
+## Plot only significantly genes (n:dim(res)-5))
+for (gene in rownames(res)){
+  print(plots_boxplot[[gene]])
+}
+```
+
+```{r}
+## Top genes analysis - heatmap genes to genes
+
+## DEGs = 0.8, p-val = 0.1 (30 genes)
+top_genes <- c("CD44", "PFKP", "FAM50A", "CD82", "LGALS1",
+               "HIF1A", "CTSZ", "CTSH", "HSPB1", "PDLIM1",
+               "OAS2", "DBN1", "GNAI2", "ECE1", "CTSD",
+               "MORF4L2", "CD68", "PHF11", "IFITM3", "NONO",
+               "RSU1", "CDC123", "MCU", "INPPL1", "RAB8B",
+               "TAF10", "SMAD3", "SART1", "FAM3C", "PSMB9")
+## DEGs = 0.8, p-val = 0.05 (16 genes)
+top_genes_02 <- c("CD44", "PFKP", "FAM50A", "CD82", "CTSZ",
+                  "CTSH", "HSPB1", "PDLIM1", "DBN1", "GNAI2",
+                  "IFITM3", "RSU1", "CDC123", "RAB8B", "TAF10", "SMAD3")
+
+## Pearson Correlation
+## Top genes
+cor_matrix <- cor(df_tpm_filtered[,top_genes], method = "pearson")
+diag(cor_matrix) <- 0
+## Top genes 02
+cor_matrix_02 <- cor(df_tpm_filtered[,top_genes_02], method = "pearson")
+diag(cor_matrix_02) <- 0
+## Plot
+pheatmap(cor_matrix, main = "Pearson Correlation, Top Genes (n:30)",
+         display_numbers = FALSE)
+pheatmap(cor_matrix_02, main = "Pearson Correlation, 2nd Top Genes (n:16)",
+         display_numbers = FALSE)
+
+## Pearson Similarity
+similarity    <- 1 / (1 + cor_matrix)
+similarity_02 <- 1 / (1 + cor_matrix_02)
+## Plot
+pheatmap(similarity, main = "Pearson Similarity, Top Genes (n:30)")
+pheatmap(similarity, main = "Pearson Similarity, 2nd Top Genes (n:16)")
+
+## Extract all the correlated genes >= 0.6
+## Top Genes
+filtered_cor_matrix <- cor_matrix
+filtered_cor_matrix[filtered_cor_matrix < 0.6] <- 0
+## Top Genes 02
+filtered_cor_matrix_02 <- cor_matrix_02
+filtered_cor_matrix_02[filtered_cor_matrix_02 < 0.6] <- 0
+
+## Top Genes
+rows_to_keep <- apply(filtered_cor_matrix, 1, function(row) any(row != 0))
+cols_to_keep <- apply(filtered_cor_matrix, 2, function(col) any(col != 0))
+filtered_cor_matrix_reduced <- filtered_cor_matrix[rows_to_keep, cols_to_keep]
+## Top Genes 02
+rows_to_keep_02 <- apply(filtered_cor_matrix_02, 1, function(row) any(row != 0))
+cols_to_keep_02 <- apply(filtered_cor_matrix_02, 2, function(col) any(col != 0))
+filtered_cor_matrix_reduced_02 <- filtered_cor_matrix_02[rows_to_keep_02, cols_to_keep_02]
+
+## Save into lists
+top_genes_corr    <-  rownames(filtered_cor_matrix_reduced)
+top_genes_corr_02 <-  rownames(filtered_cor_matrix_reduced_02)
+```
+
+
+```{r}
+## Significantly genes with right direction
+clinical_features <- c("ID", "OS_time", "OS_Event", "OS_Status", "PFS_time",
+                       "PFS_event", "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI", "Response")
+columns_to_mantain         <- c(clinical_features, top_genes)
+columns_to_mantain_02      <- c(clinical_features, top_genes_02)
+columns_to_mantain_corr    <- c(clinical_features, top_genes_corr)
+columns_to_mantain_corr_02 <- c(clinical_features, top_genes_corr_02)
+```
+
+```{r}
+## Extract Ids for patient categories
+## FP
+ids_fast_progressor <- df_final_survival %>% 
+  dplyr::select(ID, Response) %>% 
+  filter(Response == "Fast Progressor")
+## LR
+ids_long_responder <- df_final_survival %>% 
+  dplyr::select(ID, Response) %>% 
+  filter(Response == "Long Responder")
+```
+
+```{r}
+## Export
+write.csv(ids_fast_progressor, paste0(output_path, "/id_fast_progressor.csv"), row.names = T)
+write.csv(ids_long_responder, paste0(output_path, "/id_long_responder.csv"), row.names = T)
+```
+

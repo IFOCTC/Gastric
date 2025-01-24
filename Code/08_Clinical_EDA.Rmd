@@ -1,0 +1,140 @@
+---
+title: "08_Clinical_EDA"
+author: "Davide Mascolo"
+date: "2024-12-10"
+output: html_document
+---
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+## Load libraries
+library(survminer)
+library(survival)
+```
+
+```{r}
+## Load Data
+df_clinical <- read_excel(paste0(data_path, "/stomaci_wes_all.xlsx"))
+## Check
+inspect(df_clinical, "Clinical Data", show_view = TRUE)
+```
+
+```{r}
+## FIltering
+columns_survival <- c("ID", "OS_time", "OS_Event", "PFS_time",
+                      "PFS_event", "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI")
+df_clinical_survival <- df_clinical %>% 
+  dplyr::select(all_of(columns_survival)) %>% 
+  as.data.frame()
+## Check
+inspect(df_clinical_survival, "Clinical Data Survival", show_view = TRUE)
+
+## Extract id_patients
+id_patients <- df_clinical_survival$ID
+```
+
+Variables Description:
+- $ID$:             Id Patient
+- $OS_time$:        Overall Survival Time. Tempo di sopravvivenza globale, che intercorre tra l'inizio                     di un trattamento o l'inizio dello studio, fino al decesso del paziente per                           qualsiasi causa. Tempo della diagnosi o dall'inizio del trattamento fino al                           decesso del paziente. Misurato in mesi/anni.
+- $OS_Event$:       overall survival event. Evento di sopravvivenza globale si verifica quando il                         paziente muore.
+- $PFS_time$:       progression-Free Survival Time. Tempo di sopravvivenza libero da progressione, è                      il tempo che intercorre tra l'inizio di un trattamento (o inizio di uno studio) e                     la progressione della malattia (ovvero il peggioramento o l'aggravarsi della                          malattia) o il decesso del paziente. Il tempo che intercorre dall'inizio del                          trattamento fino alla progressione della malattia o decesso del paziente. Misurato                     in mesi o anni.
+- $PFS_event$:      Progression-Free Survival Event. Evento di sopravvivenza libera da progressione si                     verifica quando uno dei seguenti accade:
+                    - la malattia del paziente progredisce (ad esempio, aumenta la dimensione del                         tumore o peggiorano i sintomi clinici).
+                    - il paziente muore, prima che si verifichi la progressione della malattia.
+
+```{r}
+## EDA
+
+## Cohort distribution conditioning for OS Event
+p1 <- ggplot(df_clinical_survival, aes(x = Coorte, y = after_stat(count),
+                                 fill = factor(OS_Event))) +
+  geom_bar(color = "black", position = "dodge") +
+  scale_fill_manual(values = c("steelblue", "lightblue")) +
+  geom_text(stat = "count", aes(label = after_stat(count)),
+            position = position_dodge(width = 0.9), vjust = -0.5, color = "black") +
+  ggtitle("Cohort Distribution") +
+  xlab("Cohort") + ylab("Count") +
+  labs(fill = "OS Event Status") +
+  theme_minimal()
+
+## Cohort distribution conditioning for PFS Event
+p2 <- ggplot(df_clinical_survival, aes(x = Coorte, y = after_stat(count),
+                                 fill = PFS_event)) +
+  geom_bar(color = "black", position = "dodge") +
+  scale_fill_manual(values = c("steelblue", "lightblue")) +
+  geom_text(stat = "count", aes(label = after_stat(count)),
+            position = position_dodge(width = 0.9), vjust = -0.5, color = "black") +
+  ggtitle("Cohort Distribution") +
+  xlab("Cohort") + ylab("Count") +
+  labs(fill = "PFS Event Status") +
+  theme_minimal()
+
+## Merge
+grid.arrange(p1, p2, ncol = 2)
+
+
+##  OS Time distribution conditioning for Cohort
+p3 <- ggplot(df_clinical_survival, aes(x = Coorte, y = OS_time)) +
+  geom_violin(fill = "lightblue", alpha = 0.5) +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.7, color = "steelblue") +
+  ggtitle("OS Time Distribution") +
+  xlab("Cohort") +
+  ylab("Time") +
+  theme_minimal()
+
+## PFS Time distribution conditioning for Cohort
+p4 <- ggplot(df_clinical_survival, aes(x = Coorte, y = PFS_time)) +
+  geom_violin(fill = "lightblue", alpha = 0.5) +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.7, color = "steelblue") +
+  ggtitle("PFS Time Distribution") +
+  xlab("Cohort") +
+  ylab("Time") +
+  theme_minimal()
+
+## Merge
+grid.arrange(p3, p4, ncol = 2)
+```
+
+```{r}
+## Survival Analysis
+
+## OS 
+fit_os <- survfit(Surv(OS_time, OS_Event) ~ Coorte, data = df_clinical_survival)
+## Plot
+ggsurv_os <- ggsurvplot(fit_os, data = df_clinical_survival,
+             #risk.table = TRUE,
+             pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+             xlim = c(0, 170), xlab = "Time in Days", break.time.by = 100,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             #ncensor.plot.height = 0.25,
+             conf.int.style = "step",
+             surv.median.line = "hv",
+             legend.labs = c("Prospettici", "Restrospettivi"))
+## Add title
+ggsurv_os$plot + ggtitle("Overall Survival Analysis")
+
+## PFS Survival
+fit_pfs <- survfit(Surv(PFS_time, as.integer(PFS_event)) ~ Coorte, data = df_clinical_survival)
+## Plot
+ggsurv_fps <- ggsurvplot(fit_pfs, data = df_clinical_survival,
+             #risk.table = TRUE,
+             pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+             xlim = c(0, 100), xlab = "Time in Days", break.time.by = 100,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             #ncensor.plot.height = 0.25,
+             conf.int.style = "step",
+             surv.median.line = "hv",
+             legend.labs = c("Prospettici", "Restrospettivi"))
+## Add title
+ggsurv_fps$plot + ggtitle("Progression Free Survival Analysis")
+```
+

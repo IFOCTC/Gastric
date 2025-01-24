@@ -1,0 +1,43 @@
+---
+title: "09_Prediction_Cellular_Response"
+author: "Davide Mascolo"
+date: "2024-12-10"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Load Data
+df_tpm  <- read_excel(paste0(data_path, "/conte_TPM_linnegastrici_notriplkicatoR1.xlsx"))
+df_degs <- read.csv(paste0(output_path, "/df_volcano_degs_2.csv"))
+```
+
+```{r}
+## Filtering
+inspect(df_tpm, name = "TPM", show_view = TRUE)
+inspect(df_degs, name = "DEGs", show_view = TRUE)
+## Extract common genes
+common_genes <- intersect(df_tpm$Gene, df_degs$X)
+## Set rownames
+df_tpm <- process_df(df_tpm, "Gene")
+
+## Filter
+df_tpm_input <- df_tpm %>% 
+  filter(rownames(df_tpm) %in% common_genes)
+## Check
+inspect(df_tpm_input, name = "Filtered TPM", show_view = TRUE)
+```
+
+```{r}
+##
+
+```
+

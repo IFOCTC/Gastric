@@ -1,0 +1,165 @@
+---
+title: "01_Wrangling_EDA"
+author: "Davide Mascolo"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Code for:
+1. Use Data from 00_Support.R script
+2. Data Wrangling & EDA
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Data Wrangling
+df_line_gastric <- process_df(df_line_gastric, "Gene")
+## Check dim and view
+inspect(df_line_gastric, "Line Gastric", show_view = T)
+## Parameter
+epsilon <- 1
+
+## Save patient ids and categories
+##  RESISTANT: GTR 498, GTR 508, GTR 459; SENSITIVE: GTR210, GTR0042, GTR221, GTR 607; GTR 125
+id_patients   <- colnames(df_line_gastric)
+condition_id  <- c("SENSITIVE", "SENSITIVE", "SENSITIVE", "SENSITIVE",
+                   "SENSITIVE", "SENSITIVE", "SENSITIVE", "SENSITIVE",
+                   "SENSITIVE", "RESISTANT", "RESISTANT", "RESISTANT",
+                   "SENSITIVE", "SENSITIVE", "SENSITIVE", "RESISTANT",
+                   "RESISTANT", "RESISTANT", "RESISTANT", "RESISTANT",
+                   "RESISTANT", "SENSITIVE", "SENSITIVE", "SENSITIVE")
+
+## Create the dataframe
+df_condition <- data.frame(Id = id_patients,
+                           Condition = factor(condition_id))
+df_condition <- process_df(df_condition, "Id")
+## Add a column to the condition according to it
+df_condition$Color[df_condition$Condition == "RESISTANT"] <- c("red3")
+df_condition$Color[df_condition$Condition == "SENSITIVE"] <- c("blue3")
+
+## Check
+(t <- round(prop.table(table(df_condition$Condition)) * 100, 3))
+print("Patients' Condition Distribution: ")
+print(t)
+
+## Filtering
+row_num_t   <- 5
+min_samples <- min(table(df_condition$Condition))
+df_line_gastric_filtered <- df_line_gastric[ rowSums(df_line_gastric >= row_num_t) >= min_samples, ]
+inspect(df_line_gastric_filtered, "Filtered Line Gastric", show_view = T)
+## Apply Log2 transformation for visualization
+df_line_gastric_filtered_log <- log2(df_line_gastric_filtered + epsilon)
+```
+
+```{r}
+## EDA
+## Patients' Condition Distribution
+p1 <- ggplot(data = df_condition, aes(x = Condition)) +
+  geom_bar(fill = c("red3", "blue3")) +
+  geom_text(stat = "count", aes(label = after_stat(count)),
+            vjust = 1.5, color = "white",
+            fontface = "bold") +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  labs(title = "Patients' Condition Distribution", x = "", y = "Count") +
+  theme_minimal() +
+  theme(text = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5))
+print(p1)
+
+## Boxplot Distributions
+df_line_gastric_filtered_log$Gene <- rownames(df_line_gastric_filtered_log)
+df_long_boxplot <- melt(df_line_gastric_filtered_log,
+                        variable.name = "Sample", value.name = "Expression")
+ggplot(df_long_boxplot, aes(x = Sample, y = log2(Expression+epsilon))) +
+  geom_boxplot() +
+  labs(x = "Samples", y = expression(Gene ~ Expression ~ log[2](TPM + 1)),
+       title = "Gene Expression Distribution by Sample") +
+  theme_minimal() +
+  coord_flip()
+df_line_gastric_filtered_log$Gene <- NULL
+
+## Expression Distribution for density
+my_colors <- hue_pal()(4)
+## Plot
+plotDensity(log2(df_line_gastric_filtered_log+epsilon), col = rep(my_colors, each = 4),
+            lty = c(1: ncol(df_line_gastric_filtered_log)),
+            xlab = expression(Gene ~ Expression ~ log[2](TPM + 1), ylab = "Density",
+            main = "Expression Distribution", lwd = 1.5))
+## Legend
+legend("topright", names(df_line_gastric_filtered_log), lty = c(1:ncol(df_line_gastric_filtered_log)),
+       col = rep(my_colors, each = 4))
+abline(v = 0, lwd = 1.5, col = "red", lty = 2)
+
+
+## Distance Analysis
+## Calculate basic distance metric (euclidean distance)
+sample_dists <- dist(t(df_line_gastric_filtered_log))
+sample_simil <- 1 / (1 + sample_dists)
+## Convert to matrix
+sample_dist_matrix  <- as.matrix(sample_dists)
+sample_simil_matrix <- as.matrix(sample_simil)
+## Annotation
+annotation_dist  <- data.frame(Condition = df_condition$Condition)
+annotation_simil <- data.frame(Condition = df_condition$Condition)
+## Check
+rownames(annotation_dist)  <- rownames(sample_dist_matrix)
+rownames(annotation_simil) <- rownames(sample_simil_matrix)
+## Heatmap 
+pheatmap(sample_dist_matrix, show_colnames = T, 
+         annotation_col = annotation_dist,
+         annotation_row = annotation_dist,
+         main = "Euclidean Distance")
+pheatmap(sample_simil_matrix, show_colnames = T, 
+         annotation_col = annotation_simil,
+         annotation_row = annotation_simil,
+         main = "Euclidean Similarity")
+
+## Compute Pearson Similarity
+cor_matrix <- cor(df_line_gastric_filtered_log, method = "pearson")
+similarity <- 1 / (1 + cor_matrix)
+## Annotation
+annotation_pearson <- data.frame(Condition = df_condition$Condition)
+## Check
+rownames(annotation_pearson) <- rownames(similarity)
+## Heatmap 
+pheatmap(similarity, show_colnames = T,
+         annotation_col = annotation_pearson, 
+         annotation_row = annotation_pearson,
+         main = "Pearson Similarity")
+
+## Compute Pearson Correlation
+## Annotation
+annotation_pearson_corr <- data.frame(Condition = df_condition$Condition)
+## Check
+rownames(annotation_pearson_corr) <- rownames(cor_matrix)
+## Heatmap 
+pheatmap(cor_matrix, show_colnames = T,
+         annotation_col = annotation_pearson_corr, 
+         annotation_row = annotation_pearson_corr, 
+         main = "Pearson Correlation")
+
+## Compute Cosine Similarity
+cos_simil_matrix <- cosine(as.matrix(df_line_gastric_filtered_log)) 
+## Annotation
+annotation_cos_simil <- data.frame(Condition = df_condition$Condition)
+## Check
+rownames(annotation_cos_simil) <- rownames(cos_simil_matrix)
+## Heatmap 
+pheatmap(cos_simil_matrix, show_colnames = T,
+         annotation_col = annotation_cos_simil,
+         annotation_row = annotation_cos_simil,
+         main = "Cosine Similarity")
+```
+
+```{r}
+## Save output
+## At the end, export df_ condition to use in DEGs
+write.csv(df_condition, paste0(data_path, "/df_condition.csv"), row.names = T)
+```

@@ -1,0 +1,57 @@
+---
+title: "07_Signatures"
+author: "Davide Mascolo"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+
+```{r}
+## Load Useful
+library(GSEABase)
+library(GSVA)
+library(limma)
+library(GSEABase)
+library(edgeR)
+
+
+## Data Wrangling
+df_line_gastric <- process_df(df_line_gastric, "Gene")
+## Check dim and view
+inspect(df_line_gastric, "TPM Gastric Line", show_view = T)
+```
+
+```{r}
+## Hallmark
+hallmark_pathways <- getGmt("h.all.v2023.2.Hs.symbols.gmt")
+## Create the object parameter for ssGSEA
+ssgsea_params <- ssgseaParam(t(df_line_gastric), hallmark_pathways)
+ssGSEA_scores <- gsva(ssgsea_params)
+```
+
+```{r}
+## Scaling
+ssGSEA_scores <- ad.fata.frame(t(ssGSEA_scores))
+ssGSEA_scores_scaled <- scale(ssGSEA_scores)
+```
+
+```{r}
+## Import
+gene_sets <- read.csv("signature_gmt.csv", sep = "\t")
+gene_sets <- as.list(as.data.frame(gene_sets))
+
+expression_data <- as.matrix(df_line_gastric)
+## Create the object parameter for ssGSEA
+ssgsea_params <- ssgseaParam(t(df_line_gastric), gene_sets)
+ssGSEA_scores <- gsva(ssgsea_params)
+```
+

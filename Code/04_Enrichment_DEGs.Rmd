@@ -1,0 +1,70 @@
+---
+title: "04_Enrichment_Analysis"
+author: "Davide Mascolo"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Code for:
+1. Enrichment Analysis
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Load DEGs Data
+df_degs_08 <- read.csv(paste0(data_path, "/df_volcano_degs_08.csv"))
+df_degs_1  <- read.csv(paste0(data_path, "/df_volcano_degs_1.csv"))
+df_degs_15 <- read.csv(paste0(data_path, "/df_volcano_degs_15.csv"))
+df_degs_2  <- read.csv(paste0(data_path, "/df_volcano_degs_2.csv"))
+## Check
+inspect(df_degs_08, name = "0.8 DEGs", show_view = TRUE)
+inspect(df_degs_1, name = "1 DEGs", show_view = TRUE)
+inspect(df_degs_15, name = "1.5 DEGs", show_view = TRUE)
+inspect(df_degs_2, name = "2 DEGs", show_view = TRUE)
+```
+
+```{r}
+## Select only Up-Regulated Genes
+## 0.8
+df_degs_up_regulated_08 <- df_degs_08 %>%
+  filter(Expression == "Up-regulated") 
+df_degs_up_regulated_08 <- data.frame(df_degs_up_regulated_08)
+inspect(df_degs_up_regulated_08, name = "0.8 Up DEGs", show_view = TRUE)
+
+## 1
+df_degs_up_regulated_1 <- df_degs_1 %>%
+  filter(Expression == "Up-regulated") 
+df_degs_up_regulated_1 <- data.frame(df_degs_up_regulated_1)
+inspect(df_degs_up_regulated_1, name = "1 Up DEGs", show_view = TRUE)
+
+## 1.5
+df_degs_up_regulated_15 <- df_degs_15 %>%
+  filter(Expression == "Up-regulated") 
+df_degs_up_regulated_15 <- data.frame(df_degs_up_regulated_15)
+inspect(df_degs_up_regulated_15, name = "1.5 Up DEGs", show_view = TRUE)
+
+## 2
+df_degs_up_regulated_2 <- df_degs_2 %>% 
+  filter(Expression == "Up-regulated")
+df_degs_up_regulated_2 <- data.frame(df_degs_up_regulated_2)
+inspect(df_degs_up_regulated_2, name = "2 Up DEGs", show_view = TRUE)
+```
+
+```{r}
+## Save genes name into lists
+write.table(df_degs_up_regulated_08$X, file = paste0(output_path, "/up_genes_resistant_08.txt"),
+            row.names = F, col.names = F)
+write.table(df_degs_up_regulated_1$X, file = paste0(output_path, "/up_genes_resistant_1.txt"),
+            row.names = F, col.names = F)
+write.table(df_degs_up_regulated_15$X, file = paste0(output_path, "/up_genes_resistant_15.txt"),
+            row.names = F, col.names = F)
+write.table(df_degs_up_regulated_2$X, file = paste0(output_path, "/up_genes_resistant_2.txt"),
+            row.names = F, col.names = F)
+```

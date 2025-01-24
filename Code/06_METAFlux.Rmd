@@ -1,0 +1,62 @@
+---
+title: "06_METAFlux"
+author: "Davide Mascolo"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+Code for:
+1. Load useful for METAFlux
+
+```{r}
+## Load Useful
+library(METAFlux)
+
+## Data Wrangling
+df_line_gastric <- process_df(df_line_gastric, "Gene")
+## Check dim and view
+inspect(df_line_gastric, "TPM Gastric Line", show_view = T)
+```
+
+```{r}
+## Compute Scores
+scores <- calculate_reaction_score(df_line_gastric)
+## Check
+inspect(scores, "MRAS")
+```
+
+```{r}
+## Compute flux
+flux <- compute_flux(mras = scores, medium = cell_medium)
+## Save flux externally so do not compute every time
+```
+```{r}
+## Check
+inspect(flux, name = "Flux", show_view = TRUE)
+```
+```{r}
+## Format
+flux$X <- as.character(flux$X)
+cell_medium$reaction_name <- as.character(cell_medium$reaction_name)
+## Inner join
+df_flux_final <- merge(flux, cell_medium, by.x = "X", by.y = "reaction_name")
+
+## Formatting
+colnames(df_flux_final)[colnames(df_flux_final) == "X"] <- "reaction_name"
+## Reorder
+df_flux_final <- df_flux_final[c("metabolite", setdiff(names(df_flux_final), "metabolite"))]
+```
+
+```{r}
+## Export Flux matrix
+write.csv(df_flux_final, paste0(output_path, "/df_flux.csv"), row.names = T)
+```

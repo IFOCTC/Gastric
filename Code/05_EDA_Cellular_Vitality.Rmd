@@ -1,0 +1,39 @@
+---
+title: "05_EDA_Cellular_Vitality"
+author: "Davide Mascolo"
+date: "2024-12-09"
+output: html_document
+---
+
+Code for:
+1. Analyze the cellular vitality  data
+
+```{r include-child, echo = FALSE}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Load data
+df_cellular <- read_excel(paste0(data_path, "/screening_vitality_20nM.xlsx"))
+```
+
+```{r}
+## Data Wrangling
+df_cellular <- process_df(df_cellular, "FARMACO")
+## Check dim and view
+inspect(df_cellular, "Screening Vitality", show_view = T)
+## Check anomalies
+apply(df_cellular, 2, range)
+```
+## Anomaly: FARMACO: SR-4835, LINEA CELLULARE: GTR0042, VALORE: -2.0739160
+
+```{r}
+## EDA
+describe(df_cellular)
+
+## Plot
+## Run the app
+shinyApp(ui = ui, server = server)
+```
+

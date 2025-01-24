@@ -1,0 +1,294 @@
+---
+title: "03_Network_Analysis"
+author: "Davide Mascolo"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Code for:
+1. Network Analysis
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Use TPM Data
+## Data Wrangling
+df_line_gastric <- process_df(df_line_gastric, "Gene")
+## Check dim and view
+inspect(df_line_gastric, "Line Gastric", show_view = T)
+## Filtering
+row_num_t   <- 5
+min_samples <- 9
+df_line_gastric_filtered <- df_line_gastric[rowSums(df_line_gastric >= row_num_t) >= min_samples,]
+inspect(df_line_gastric_filtered, "Filtered Line Gastric", show_view = T)
+## After filtering ---> 10694 genes for 24 patients
+
+## Load DEGs
+df_degs    <- read.csv(paste0(data_path, "/df_volcano_degs.csv"))
+## 927 genes
+
+## Save patient ids and categories
+##  RESISTANT: GTR 498, GTR 508, GTR 459; SENSITIVE: GTR210, GTR0042, GTR221, GTR 607; GTR 125
+id_patients   <- colnames(df_line_gastric)
+condition_id  <- c("SENSITIVE", "SENSITIVE", "SENSITIVE", "SENSITIVE",
+                   "SENSITIVE", "SENSITIVE", "SENSITIVE", "SENSITIVE",
+                   "SENSITIVE", "RESISTANT", "RESISTANT", "RESISTANT",
+                   "SENSITIVE", "SENSITIVE", "SENSITIVE", "RESISTANT",
+                   "RESISTANT", "RESISTANT", "RESISTANT", "RESISTANT",
+                   "RESISTANT", "SENSITIVE", "SENSITIVE", "SENSITIVE")
+
+## Create the dataframe
+df_condition <- data.frame(Id = id_patients,
+                           Condition = factor(condition_id))
+df_condition <- process_df(df_condition, "Id")
+## Add a column to the condition according to it
+df_condition$Color[df_condition$Condition == "RESISTANT"] <- c("red3")
+df_condition$Color[df_condition$Condition == "SENSITIVE"] <- c("blue3")
+```
+
+```{r}
+## Co Expression Analysis
+## Filter for the two conditions
+id_patients_resistant <- df_condition %>% 
+  filter(Condition == "RESISTANT")
+id_patients_sensitive <- df_condition %>% 
+  filter(Condition == "SENSITIVE")
+## Filter also for the DEGs genes (this is done ONLY for computational reasons,
+## if the PC is able to mantain the memory, pass the TPM as input for the
+## networks building)
+## Subset
+df_line_gastric_resistant <- df_line_gastric[rownames(df_line_gastric) %in%
+                                                        df_degs$X,
+                                                      colnames(df_line_gastric) %in%
+                                                        rownames(id_patients_resistant)]
+## 927 genes for 9 patients
+df_line_gastric_sensitive <- df_line_gastric[rownames(df_line_gastric) %in%
+                                                        df_degs$X,
+                                                      colnames(df_line_gastric) %in%
+                                                        rownames(id_patients_sensitive)]
+## 927 genes for 15 patients
+## There are some genes that are classified as DEGs, but are not presented within the
+## TPM matrix. This is causing by the filtering operation if we consider the filtered TPM matrix.
+## To avoid this, we consider the original TPM matrix filtered for DEGs genes.
+## Check
+dim(df_line_gastric_resistant);dim(df_line_gastric_sensitive)
+
+## Adjacency Matrix Resistant (Pearson)
+adj_mat_resistant <- compute_adjacency(df_line_gastric_resistant, cor_type = "pearson")
+## Resistant Hubs
+hubs_resistant <- compute_hubs(adj_mat_resistant)
+
+## Degree distribution in order to check if the network is scale free
+df1 <- data.frame(cbind(hubs_resistant$degree))
+colnames(df1) <- "Degree"
+(hist_resistant <- ggplot(df1, aes(x = Degree)) +
+    geom_histogram(fill = "steelblue", alpha = 07, bins = 20) +
+    ggtitle("Degree Distribution (Resistant Co-Expression Network)") +
+    xlab("Degree") +
+    ylab("Frequency") +
+    theme_minimal())
+
+## Compute Resistant Network
+net_resistant <- network(adj_mat_resistant, matrix.type = "adjacency",
+                         ignore.eval = FALSE, names.eval = "weights",
+                         directed = FALSE)
+## Compute density
+network.density(net_resistant)
+## Giant Component
+nrow(component.largest(net_resistant, result = "graph"))
+
+## How many positive/negative correlations?
+sum(adj_mat_resistant == 1)
+sum(adj_mat_resistant == -1)
+
+## Plot Resistant Hubs
+plot_graph(net_resistant, hubs_resistant$code_hubs,
+           title = "Resistant Co-Expression Network Hubs")
+
+## Identify the hubs characterizing only resistant patients
+hubs_resistant$code_hubs
+
+
+## Adjacency Matrix Sensitive (Pearson)
+adj_mat_sensitive <- compute_adjacency(df_line_gastric_sensitive, cor_type = "pearson")
+## Sensitive Hubs
+hubs_sensitive <- compute_hubs(adj_mat_sensitive)
+
+## Degree distribution in order to check if the network is scale free
+df2 <- data.frame(cbind(hubs_sensitive$degree))
+colnames(df2) <- "Degree"
+(hist_sensitive <- ggplot(df2, aes(x = Degree)) +
+    geom_histogram(fill = "steelblue", alpha = 07, bins = 20) +
+    ggtitle("Degree Distribution (Sensitive Co-Expression Network)") +
+    xlab("Degree") +
+    ylab("Frequency") +
+    theme_minimal())
+
+## Compute Sensitive Network
+net_sensitive <- network(adj_mat_sensitive, matrix.type = "adjacency",
+                         ignore.eval = FALSE, names.eval = "weights",
+                         directed = FALSE)
+## Compute density
+network.density(net_sensitive)
+## Giant Component
+nrow(component.largest(net_sensitive, result = "graph"))
+
+## How many positive/negative correlations?
+sum(adj_mat_resistant == 1)
+sum(adj_mat_resistant == -1)
+
+## Plot Sensitive Hubs
+plot_graph(net_resistant, hubs_resistant$code_hubs,
+           title = "Sensitive Co-Expression Network Hubs")
+
+## Identify the hubs characterizing only resistant patients
+hubs_sensitive$code_hubs
+
+## Common Hubs for two conditions
+intersect(hubs_resistant$final_hubs, hubs_sensitive$final_hubs)
+
+
+## Differential Co-Expressed Network
+## Resistant
+cor_resistant <- cor(t(df_line_gastric_resistant), method = "pearson")
+diag(cor_resistant) <- 0
+## Sensitive
+cor_sensitive <- cor(t(df_line_gastric_sensitive), method = "pearson")
+diag(cor_sensitive) <- 0
+## Calculation of differential correlations
+## Apply Fisher z-transformation
+z_r <- 0.5 * log((1 + cor_resistant) / (1 - cor_resistant))
+z_s <- 0.5 * log((1 + cor_sensitive) / (1 - cor_sensitive))
+
+## Sample size for each of the condition
+n_r <- ncol(cor_resistant)
+n_s <- ncol(cor_sensitive)
+
+## Z-score to evaluate the correlation
+Z <- (z_r - z_s) / sqrt(1/(n_r - 3) + (1/(n_s - 3)))
+
+## Threshold 
+t <- 40
+
+## Adjacency Matrix a_ij = 0, if |Z| < 100.
+adj_differential <- ifelse(abs(Z) < t, 0, 1)
+
+## Generate network
+net_diff_coex <- graph_from_adjacency_matrix(adj_differential,
+                                             mode = "undirected",
+                                             diag = FALSE)
+
+## Plot network (Time Consuming)
+ggnet2(net_diff_coex, color = "blue", alpha = 0.7, size = 2,
+       edge.color = "grey", edge.alpha = 1, edge.size = 0.15) + 
+  guides(size = "none") +
+  ggtitle("Differential Co-Expression Network") +
+  theme_minimal() +
+  xlab("") + ylab("")
+```
+
+```{r}
+## Analysis
+## Compute the degree index
+degree_diff_coex <- sort(rowSums(adj_differential),
+                         decreasing = TRUE)
+
+## Who is the most connected hub?
+(hub_most_connected <- degree_diff_coex[1])
+## Extract the neighbours
+idx   <- which(colnames(adj_differential) == names(hub_most_connected))
+neigh <- names(which(adj_differential[,idx] == 1))
+neigh <- c(neigh, names(hub_most_connected))
+
+## Plot most connected hub with neighbours
+subgraph_hubs <- subgraph(net_diff_coex, neigh)
+V(subgraph_hubs)$color <- ifelse(V(subgraph_hubs)$name == names(hub_most_connected),
+                                 "red", "blue")
+
+## Plot network 
+plot(subgraph_hubs, color = V(subgraph_hubs)$color,
+     vertex.label = NA,
+     vertex.size = 5)
+
+## Plot degree distribution to check if the graph is a scale-free
+df5           <- data.frame(cbind(degree_diff_coex))
+colnames(df5) <- "Degree"
+ggplot(df5, aes(x = Degree)) +
+  geom_histogram(fill = "blue", alpha = 0.7, bins = 20) +
+  ggtitle("Degree Distribution (Differential Co-Expression Network)",
+          subtitle = "using t = 50") +
+  xlab("Degree") +
+  ylab("Frequency") +
+  theme_minimal()
+
+## Compute hubs
+## how big is the degree of the most connected nodes?
+(q_diff_coex <- quantile(degree_diff_coex[degree_diff_coex > 0],
+                         0.95))
+## The 5% of the most connected nodes have a degree greater than 28.65
+
+
+## Find the hubs (5% of the nodes with highest degree values)
+hubs_diff_coex <- degree_diff_coex[degree_diff_coex >= q_diff_coex]
+## Genes
+names(hubs_diff_coex)
+## How many?
+length(hubs_diff_coex)
+
+## Common with Resistance
+cat(intersect(names(hubs_diff_coex), names(hubs_resistant$code_hubs)))
+## Common with Sensitive
+cat(intersect(names(hubs_diff_coex), names(hubs_sensitive$code_hubs)))
+```
+
+```{r}
+## Patient Similarity Network (PSN)
+## Compute Euclidean similarity
+annotations           <- data.frame(Condition = df_condition$Condition)
+rownames(annotations) <- rownames(df_condition)
+corr_pearson <- cor(df_line_gastric_filtered, method = "pearson")
+## Heatmap
+pheatmap(corr_pearson, annotation_col = annotations,
+         annotation_row =  annotations, main = "Pearson Correlation",
+         display_numbers = TRUE)
+
+## Network
+psn_network <- graph_from_adjacency_matrix(corr_pearson,
+                                           mode = "undirected",
+                                           weighted = TRUE)
+## Louvian Algorithm for Community Detection
+(lc <- cluster_louvain(psn_network))
+## DBSCAN
+## Optimal value of eps
+dbscan::kNNdistplot(corr_pearson, k = 2)
+abline(h = 0.45, lty = 2)
+## Compute
+res_fpc <- dbscan::dbscan(corr_pearson, 0.45, 4)
+## Plot
+fviz_cluster(res_fpc, corr_pearson, geom = "point")
+
+
+## We can see the communities
+communities(lc) 
+
+## Create new attributes
+rain <- c("red", "blue", "green")
+V(psn_network)$community <- lc$membership
+V(psn_network)$color <- rain[V(psn_network)$community]
+## Set edges colors
+E(psn_network)$color <- apply(as.data.frame(as_edgelist(psn_network)), 1, 
+                                function(x) ifelse((V(psn_network)$community[which(lc$names == x[1])] ==
+                                                      V(psn_network)$community[which(lc$names == x[2])]),
+                                                   rain[V(psn_network)$community[which(lc$names == x[1])]], "grey"))
+## Plot
+plot(psn_network, vertex.size = 4,
+     vertex.label = NA, edge.color = E(psn_network)$color,
+     main = "")
+```

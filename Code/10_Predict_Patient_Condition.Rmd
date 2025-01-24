@@ -1,0 +1,407 @@
+---
+title: "10_Predict_Patient_Condition"
+author: "Davide Mascolo"
+date: "2024-12-10"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Load Script 
+knitr::knit_child("00_Support.Rmd")
+```
+
+```{r}
+## Load Data
+df_degs <- read.csv(paste0(output_path, "/df_volcano_degs_2.csv"))
+df_tpm  <- read_tsv(paste0(data_path, "/salmon.merged.gene_tpm.tsv"), show_col_types = FALSE)
+```
+
+```{r}
+## Check
+inspect(df_tpm, name = "TPM Patients", show_view = TRUE)
+inspect(df_degs, name = "DEGS Up", show_view = TRUE)
+```
+
+```{r}
+## Wrangling
+df_tpm$gene_id <- NULL
+genes_down_regulated <- df_degs %>% 
+  filter(Expression == "Down-regulated")
+
+## Filtering on genes considering DEGs Up downregulated and tumor patients
+df_tpm_filtered <- df_tpm %>% 
+  filter(df_tpm$gene_name %in% genes_down_regulated$X) %>% 
+  dplyr::select(gene_name, matches("T$"))
+
+## Transpose ---> Patient x Gene
+df_tpm_filtered <- process_df(df_tpm_filtered, "gene_name")
+df_tpm_filtered <- data.frame(t(df_tpm_filtered))
+# ## Only for Up-regulated
+# genes_name <- df_tpm_filtered$gene_name
+# df_tpm_filtered$gene_name <- NULL
+# df_tpm_filtered <- t(df_tpm_filtered)
+# colnames(df_tpm_filtered) <- genes_name
+# df_tpm_filtered <- data.frame(df_tpm_filtered)
+
+## Check
+inspect(df_tpm_filtered, name = "Filtered TPM x Genes", show_view = TRUE)
+```
+
+```{r}
+## Compute mean for each patient (column)
+df_tpm_filtered <- df_tpm_filtered %>%
+  mutate(Mean = rowMeans(across(everything()), na.rm = TRUE))
+
+## Check
+inspect(df_tpm_filtered, name = "Filtered TPM x Genes with Mean Column", show_view = TRUE)
+```
+
+```{r}
+## Compute median on mean dataset
+median_value <- median(df_tpm_filtered$Mean)
+
+## Plot
+ggplot(df_tpm_filtered, aes(x = Mean, y = after_stat(count))) +
+  geom_histogram(fill = "orange", color = "black", bins = 30) +
+  geom_vline(aes(xintercept = median_value), color = "steelblue",
+             linetype = "dashed", linewidth = 1) +
+  annotate("text", x = 20, y = 30, label = paste("Median = ", round(median_value, 3))) +
+  ggtitle("Mean Patients Distribution x Gene") +
+  xlab("Mean") +
+  ylab("Count") +
+  theme_minimal()
+```
+
+```{r}
+## Considering the median value, it is possible to classify the patients considering their gene expression level
+
+## Thresholding
+df_tpm_filtered <- df_tpm_filtered %>%
+  mutate(Condition = ifelse(Mean >= median_value, "High", "Low"))
+
+## Check
+inspect(df_tpm_filtered, name = "Filtered TPM x Genes with Condition Column", show_view = TRUE)
+```
+
+```{r}
+## Combine with clinical data
+
+## Load Data
+df_clinical <- read_excel(paste0(data_path, "/stomaci_wes_all.xlsx"))
+## FIltering
+columns_survival <- c("ID", "OS_time", "OS_Event", "PFS_time",
+                      "PFS_event", "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI")
+df_clinical_survival <- df_clinical %>% 
+  dplyr::select(all_of(columns_survival)) %>% 
+  as.data.frame()
+
+## Extract id_patients
+id_patients <- df_clinical_survival$ID
+```
+
+```{r}
+## Add one column for merge
+df_tpm_filtered$ID <- rownames(df_tpm_filtered)
+df_tpm_filtered <- df_tpm_filtered[, c("ID",
+                                       colnames(df_tpm_filtered)[colnames(df_tpm_filtered) != "ID"])]
+## Operations before merging on ID tpm
+df_tpm_filtered$ID <- gsub("\\.1T$", "", df_tpm_filtered$ID)
+df_tpm_filtered$ID <- gsub("\\.", "-", df_tpm_filtered$ID)
+
+## Check
+inspect(df_tpm_filtered, name = "TPM", show_view = TRUE)
+
+## Merge
+df_final_survival <- merge(df_clinical_survival, df_tpm_filtered, by = "ID")
+## Select low patients and high patients
+id_patients_low  <- df_final_survival %>% 
+  filter(Condition == "Low") %>% 
+  dplyr::select(ID)
+id_patients_high <- df_final_survival %>% 
+  filter(Condition == "High") %>% 
+  dplyr::select(ID)
+
+## Filter TPM
+df_tpm_filtered_low  <- df_tpm_filtered %>% 
+  filter(ID %in% id_patients_low$ID)
+df_tpm_filtered_high <-df_tpm_filtered %>% 
+  filter(ID %in% id_patients_high$ID)
+
+## Remove ID columns
+df_tpm_filtered_low$ID  <- NULL
+df_tpm_filtered_high$ID <- NULL
+## Convert
+df_tpm_filtered_low <- df_tpm_filtered_low %>%
+  mutate(across(everything(), ~ as.numeric(.)))
+df_tpm_filtered_high <- df_tpm_filtered_high %>%
+  mutate(across(everything(), ~ as.numeric(.)))
+
+## Check
+inspect(df_final_survival, name = "Survival DF", show_view = TRUE)
+## Two dataframes useful to build the network
+inspect(df_tpm_filtered_low, name = "Low Patients TPM", show_view = TRUE)
+inspect(df_tpm_filtered_high, name = "High Patients TPM", show_view = TRUE)
+```
+
+```{r}
+## Survival Analysis
+
+## OS 
+fit_os <- survfit(Surv(OS_time, OS_Event) ~ Condition, data = df_final_survival)
+## Plot
+ggsurv_os <- ggsurvplot(fit_os, data = df_final_survival,
+             pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+             xlim = c(0, 170), xlab = "Time in Days", break.time.by = 100,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+## Add title
+ggsurv_os$plot + ggtitle("Overall Survival Analysis")
+
+## PFS Survival
+fit_pfs <- survfit(Surv(PFS_time, as.numeric(PFS_event)) ~ Condition, data = df_final_survival)
+## Plot
+ggsurv_fps <- ggsurvplot(fit_pfs, data = df_final_survival,
+             pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+             xlim = c(0, 100), xlab = "Time in Days", break.time.by = 100,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+## Add title
+ggsurv_fps$plot + ggtitle("Progression Free Survival Analysis")
+```
+
+```{r}
+## Select columns to exlude for testing
+columns_to_exlude <- c("ID", "Mean")
+## Filter
+res <- df_tpm_filtered %>% 
+  dplyr::select(-all_of(columns_to_exlude)) %>% 
+  kruskal_test_on_genes() %>% 
+  filter(p_value <= 0.05) %>% 
+  inspect(name = "P-value <= 0.05") ## 355 (significantly) Vs. 478 total
+
+## Plot
+plots <- plot_kruskal_boxplot(df_tpm_filtered, "Condition")
+```
+
+```{r}
+## Considering always the single genes, we test the survival curves
+res_df <- survival_gene(df_final_survival,
+                        os_time_col = "OS_time", os_event_col = "OS_Event",
+                        condition_col = "Condition")
+res_df
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## ****************************************************
+## Network Approach - Differential Expression Network
+```{r}
+## Remove columns (genes) with sd = 0
+df_tpm_filtered_high$`RP11-66N11.8` <- NULL
+df_tpm_filtered_low$`RP11-66N11.8`  <- NULL
+
+## Network Analysis
+
+## Differential Co-Expressed Network
+## High
+cor_high <- cor(df_tpm_filtered_high, method = "pearson")
+diag(cor_high) <- 0
+## Low
+cor_low <- cor(df_tpm_filtered_low, method = "pearson") 
+diag(cor_low) <- 0
+## Calculation of differential correlations
+## Apply Fisher z-transformation
+z_h <- 0.5 * log((1 + cor_high) / (1 - cor_high))
+z_l <- 0.5 * log((1 + cor_low) / (1 - cor_low))
+
+## Sample size for each of the condition
+n_h <- ncol(cor_high)
+n_l <- ncol(cor_low)
+
+## Z-score to evaluate the correlation
+Z <- (z_h - z_l) / sqrt(1/(n_h - 3) + (1/(n_l - 3)))
+
+## Threshold 
+t <- 3
+
+## Adjacency Matrix a_ij = 0, if |Z| < 100.
+adj_differential <- data.frame(ifelse(abs(Z) < t, 0, 1))
+
+## Generate network
+net_diff_coex <- graph_from_adjacency_matrix(as.matrix(adj_differential),
+                                             mode = "max",
+                                             diag = FALSE)
+```
+
+```{r}
+## Analysis - Extract hubs
+
+## Compute the degree index
+degree_diff_coex <- sort(rowSums(adj_differential),
+                         decreasing = TRUE)
+
+## Who is the most connected hub?
+(hub_most_connected <- degree_diff_coex[1])
+## Extract the neighbours
+idx   <- which(colnames(adj_differential) == names(hub_most_connected))
+neigh <- names(which(adj_differential[,idx] == 1))
+neigh <- c(neigh, names(hub_most_connected))
+
+## Plot degree distribution to check if the graph is a scale-free
+df5           <- data.frame(cbind(degree_diff_coex))
+colnames(df5) <- "Degree"
+ggplot(df5, aes(x = Degree)) +
+  geom_histogram(fill = "blue", alpha = 0.7, bins = 20) +
+  ggtitle("Degree Distribution (Differential Co-Expression Network)",
+          subtitle = "using t = 3") +
+  xlab("Degree") +
+  ylab("Frequency") +
+  theme_minimal()
+
+## Compute hubs
+## how big is the degree of the most connected nodes?
+(q_diff_coex <- quantile(degree_diff_coex[degree_diff_coex > 0],
+                         0.90))
+
+
+## Find the hubs (5% of the nodes with highest degree values)
+hubs_diff_coex <- degree_diff_coex[degree_diff_coex >= q_diff_coex]
+## Genes
+names(hubs_diff_coex)
+## How many?
+length(hubs_diff_coex)
+```
+
+```{r}
+## Filter the df used for survival analysis, considering only different coexpressed hubs 
+df_tpm_filtered_02 <- df_tpm_filtered[ ,colnames(df_tpm_filtered) %in% names(hubs_diff_coex)]
+## Transform
+df_tpm_filtered_02 <- df_tpm_filtered_02 %>%
+  mutate(across(everything(), ~ as.numeric(.)))
+df_tpm_filtered_02$ID <- rownames(df_tpm_filtered_02)
+df_tpm_filtered_02 <- df_tpm_filtered_02[, c("ID",
+                                  colnames(df_tpm_filtered_02)[colnames(df_tpm_filtered_02) != "ID"])]
+df_tpm_filtered_02$ID <- gsub("\\.1T$", "", df_tpm_filtered_02$ID)
+df_tpm_filtered_02$ID <- gsub("\\.", "-", df_tpm_filtered_02$ID)
+
+## Check
+inspect(df_tpm_filtered_02, name = "Filtered TPM x Genes", show_view = TRUE)
+```
+
+```{r}
+## Compute mean for each patient (column)
+df_tpm_filtered_02$ID <- NULL
+mean_patients_02 <- data.frame(apply(df_tpm_filtered_02, 1, mean))
+colnames(mean_patients_02) <- "Mean_Patient"
+```
+
+```{r}
+## Compute median on mean dataset
+median_value_02 <- median(mean_patients_02$Mean_Patient)
+
+## Plot
+ggplot(mean_patients_02, aes(x = Mean_Patient, y = after_stat(count))) +
+  geom_histogram(fill = "orange", color = "black", bins = 30) +
+  geom_vline(aes(xintercept = median_value), color = "steelblue",
+             linetype = "dashed", linewidth = 1) +
+  annotate("text", x = 20, y = 30, label = paste("Median = ", round(median_value, 3))) +
+  ggtitle("Mean Patients Distribution x Gene") +
+  xlab("Mean") +
+  ylab("Count") +
+  theme_minimal()
+```
+
+```{r}
+## Considering the median value, it is possible to classify the patients considering their gene expression level
+
+## Thresholding
+mean_patients_02 <- as.data.frame(mean_patients_02) %>%
+  mutate(Condition <- ifelse(Mean_Patient >= median_value_02, "High", "Low"))
+colnames(mean_patients_02) <- c("Mean", "Condition")
+```
+
+```{r}
+## Combine with clinical data
+
+## Load Data
+df_clinical <- read_excel(paste0(data_path, "/stomaci_wes_all.xlsx"))
+## FIltering
+columns_survival <- c("ID", "OS_time", "OS_Event", "PFS_time",
+                      "PFS_event", "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI")
+df_clinical_survival <- df_clinical %>% 
+  dplyr::select(all_of(columns_survival)) %>% 
+  as.data.frame()
+
+## Extract id_patients
+id_patients <- df_clinical_survival$ID
+```
+
+```{r}
+## Useful operations for mean patient data
+mean_patients_02$ID <- row.names(mean_patients_02)
+mean_patients_02$ID <- gsub("\\.1T$", "", mean_patients_02$ID)
+mean_patients_02$ID <- gsub("\\.", "-", mean_patients_02$ID)
+
+## Merge
+df_final_survival_02 <- merge(df_clinical_survival, mean_patients_02, by = "ID")
+```
+
+```{r}
+## Survival Analysis
+
+## OS 
+fit_os <- survfit(Surv(OS_time, OS_Event) ~ Condition, data = df_final_survival_02)
+## Plot
+ggsurv_os <- ggsurvplot(fit_os, data = df_final_survival_02,
+             pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+             xlim = c(0, 160), xlab = "Time in Days", break.time.by = 100,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+## Add title
+ggsurv_os$plot + ggtitle("Overall Survival Analysis")
+
+## PFS Survival
+fit_pfs <- survfit(Surv(PFS_time, as.integer(PFS_event)) ~ Condition, data = df_final_survival_02)
+## Plot
+ggsurv_fps <- ggsurvplot(fit_pfs, data = df_final_survival_02,
+             pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+             xlim = c(0, 100), xlab = "Time in Days", break.time.by = 100,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+## Add title
+ggsurv_fps$plot + ggtitle("Progression Free Survival Analysis")
+```

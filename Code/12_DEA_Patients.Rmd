@@ -1,0 +1,382 @@
+---
+title: "12_EDA_Patients"
+author: "Davide Mascolo"
+date: "2024-12-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load Data
+```{r}
+## Load Useful
+library(readr)
+library(readxl)
+library(DESeq2)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(affy)
+library(scales)
+library(pheatmap)
+library(lsa)
+library(vsn)
+library(EnhancedVolcano)
+library(glue)
+library(biomaRt)
+library(psych)
+library(reshape2)
+library(stringr)
+library(network)
+library(igraph)
+library(sna)
+library(GGally)
+library(gplots)
+library(gridExtra)
+library(shiny)
+library(survival)
+library(survminer)
+options(scipen = 999)
+
+## Set data path directory
+data_path   <- "C:/Users/david/Documents/IFO/Gastric/Data"
+output_path <- "C:/Users/david/Documents/IFO/Gastric/Output_Res"
+
+## Load Data
+df_clinical <- read_excel(paste0(data_path, "/stomaci_wes_all.xlsx"))
+df_rna_patients <- read_tsv(paste0(data_path, "/salmon.merged.gene_counts_length_scaled.tsv"),
+                            col_types = cols(.default = col_double(),
+                                             gene_id = col_character(),
+                                             gene_name = col_character()))
+df_tpm  <- read_tsv(paste0(data_path, "/salmon.merged.gene_tpm.tsv"), show_col_types = FALSE)
+```
+
+### Wrangling
+```{r}
+## Transpose
+df_rna_patients_t <- t(df_rna_patients)
+## Extract informations
+gene_names <- df_rna_patients_t[2,]
+gene_ids   <- df_rna_patients_t[1,]
+## Setting colnames
+colnames(df_rna_patients_t) <- gene_names
+## Remove first two columns
+df_rna_patients_t <- df_rna_patients_t[-c(1,2),]
+## Filtering patients
+df_rna_patients_filtered <- df_rna_patients_t[grepl("\\.1T$", rownames(df_rna_patients_t)), ]
+rownames(df_rna_patients_filtered) <- gsub("\\.1T$", "", rownames(df_rna_patients_filtered))
+rownames(df_rna_patients_filtered) <- gsub("\\.", "-", rownames(df_rna_patients_filtered))
+## Collect ID Columns
+patient_ids <- rownames(df_rna_patients_filtered)
+## Transpose for filtering
+df_rna_patients_filtered <- t(df_rna_patients_filtered)
+df_rna_patients_filtered <- data.frame(df_rna_patients_filtered)
+## Apply numeric transformation
+df_rna_patients_filtered <- as.data.frame(apply(df_rna_patients_filtered, 2, as.numeric))
+## Setting rownames
+rownames(df_rna_patients_filtered) <- make.unique(gene_names)
+## Substitute
+colnames(df_rna_patients_filtered) <- gsub("\\.", "-", colnames(df_rna_patients_filtered))
+
+## Export
+write.csv(df_rna_patients_filtered, paste0(data_path, "/rna_cleaned_scaled.csv"),
+          row.names = FALSE)
+```
+
+
+## Starting from here
+```{r}
+## Load Data
+df_rna_patients_filtered <- read.csv(paste0(data_path, "/rna_cleaned_scaled.csv"))
+rownames(df_rna_patients_filtered) <- df_rna_patients_filtered$X
+df_rna_patients_filtered$X <- NULL
+colnames(df_rna_patients_filtered) <- gsub("\\.", "-", colnames(df_rna_patients_filtered))
+
+## Filtering for genes
+df_rna_patients_filtered <- round(df_rna_patients_filtered, 0)
+row_num_t   <- 50
+min_samples <- table(df_clinical_survival$Response)[[2]] ## 41 patients Long Responder
+df_rna_patients_filtered <- df_rna_patients_filtered[rowSums(df_rna_patients_filtered
+                                                             >= row_num_t) >= min_samples, ]
+## Genes to remove
+inspect(df_rna_patients_filtered, "Filtered Rna Counts", show_view = T)
+```
+
+```{r}
+## Clinical Filtering
+columns_survival <- c("ID", "OS_time", "OS_Event", "PFS_time",
+                      "PFS_event", "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI")
+
+## Consider only some columns and patients with treatment
+df_clinical_survival <- df_clinical %>% 
+  dplyr::select(all_of(columns_survival)) %>% 
+  filter(CT1L_FLOT_1SI == 1) %>% 
+  as.data.frame()
+
+## Patients classification:
+## Fast Progressor (PFS <= 6 months & PFS Event == 1), Long Responder (PFS >= 12 months),
+## Conventional Responder (remaining part). 
+df_clinical_survival <- df_clinical_survival %>% 
+  mutate(Response = case_when(PFS_time <= 6 & PFS_event == 1 ~ "Fast_Progressor",
+                              PFS_time >= 12  ~ "Long_Responder",
+                              TRUE ~ "Conventional_Responder"))
+# Filtering
+df_clinical_survival <- df_clinical_survival %>%
+  filter(Response != "Conventional_Responder")
+
+## Create the dataframe
+df_condition <- data.frame(Id = df_clinical_survival$ID,
+                           Response = factor(df_clinical_survival$Response))
+df_condition <- process_df(df_condition, "Id")
+rownames(df_condition) <- sort(rownames(df_condition))
+
+## Filtering also rna-counts
+common_patients <- intersect(colnames(df_rna_patients_filtered), rownames(df_condition))
+## Rna
+df_rna_patients_filtered <- df_rna_patients_filtered %>%
+  dplyr::select(all_of(intersect(colnames(df_rna_patients_filtered), common_patients)))
+## Condition
+df_condition <- df_condition %>% 
+  filter(rownames(df_condition) %in% common_patients)
+## Clinical
+df_clinical_survival <- df_clinical_survival %>% 
+  filter(ID %in% common_patients)
+
+## Expression value for filtered genes
+# df_expression <- data.frame(Mean = apply(df_rna_patients_filtered, 1, mean),
+#                             Var = apply(df_rna_patients_filtered, 1, var),
+#                             Sd = apply(df_rna_patients_filtered, 1, sd),
+#                             IQR = apply(df_rna_patients_filtered, 1, IQR),
+#                             Median = apply(df_rna_patients_filtered, 1, median),
+#                             Max = apply(df_rna_patients_filtered, 1, max),
+#                             Min = apply(df_rna_patients_filtered, 1, min))
+# df_expression$Outlier <- ifelse(df_expression$Max >= mean(df_expression$Max),
+#                                 "Yes", "No")
+## Exclude outliers
+# genes_to_collect <- df_expression %>%
+#   filter(Outlier == "Yes")
+# genes_to_collect <- rownames(genes_to_collect)
+# df_rna_patients_filtered <- df_rna_patients_filtered %>% 
+#   filter(rownames(df_rna_patients_filtered) %in% genes_to_collect)
+```
+
+```{r}
+## Filter genes considering to remove RP and AC
+## Select all the genes which starts with RP
+# genes_with_rp <- rownames(df_rna_patients_filtered[grepl("^RP.",
+#                           rownames(df_rna_patients_filtered)), ])
+# ## AC
+# genes_with_ac <- rownames(df_rna_patients_filtered[grepl("^AC",
+#                                                          rownames(df_rna_patients_filtered)), ])
+# genes_to_exclude <- c(genes_with_rp, genes_with_ac)
+# ## Exclude them
+# df_rna_patients_filtered_final <- df_rna_patients_filtered[!rownames(df_rna_patients_filtered)
+#                                                            %in% genes_to_exclude,]
+```
+
+
+## DEA
+```{r}
+## Preliminary DEGs
+dds <- DESeqDataSetFromMatrix(countData = df_rna_patients_filtered,
+                              colData = df_condition,
+                              design = ~ Response)
+
+## DEA
+dds <- DESeq(dds)
+
+## Extract res
+res_1 <- results(dds, alpha = 0.1)
+res_1
+summary(res_1)
+## We are watching for Long Responder Vs Fast Progressor 
+```
+
+
+
+```{r}
+## Example of how to use the function for different thresholds
+t_values <- c(0.8, 1, 1.5, 2)
+
+result_08 <- generate_volcano(t = t_values[1], res = res_1, padj_t = 0.05, top_n = 50)
+result_1  <- generate_volcano(t = t_values[2], res = res_1, padj_t = 0.05, top_n = 50)
+result_15 <- generate_volcano(t = t_values[3], res = res_1, padj_t = 0.05, top_n = 50)
+result_2  <- generate_volcano(t = t_values[4], res = res_1, padj_t = 0.05, top_n = 50)
+
+## Access the plot, volcano data, DEGs data, and expression summary for a specific threshold
+volcano_plot_t1 <- result_08$plot
+volcano_data_t1 <- result_08$volcano_data
+volcano_degs_t1 <- result_08$degs_data
+expression_summary_t1 <- result_08$expression_table
+print(expression_summary_t1)
+
+volcano_plot_t2 <- result_1$plot
+volcano_data_t2 <- result_1$volcano_data
+volcano_degs_t2 <- result_1$degs_data
+expression_summary_t2 <- result_1$expression_table
+print(expression_summary_t2)
+
+volcano_plot_t3 <- result_15$plot
+volcano_data_t3 <- result_15$volcano_data
+volcano_degs_t3 <- result_15$degs_data
+expression_summary_t3 <- result_15$expression_table
+print(expression_summary_t3)
+
+volcano_plot_t4 <- result_2$plot
+volcano_data_t4 <- result_2$volcano_data
+volcano_degs_t4 <- result_2$degs_data
+expression_summary_t4 <- result_2$expression_table
+print(expression_summary_t4)
+```
+
+```{r}
+## Save Output
+## Export Volcano Data and Volcano DEGs
+write.csv(volcano_degs_t1, paste0(output_path, "/df_volcano_degs_Patients_08.csv"), row.names = T)
+write.csv(volcano_degs_t2, paste0(output_path, "/df_volcano_degs_Patients_1.csv"), row.names = T)
+write.csv(volcano_degs_t3, paste0(output_path, "/df_volcano_degs_Patients_15.csv"), row.names = T)
+write.csv(volcano_degs_t4, paste0(output_path, "/df_volcano_degs_Patients_2.csv"), row.names = T)
+```
+
+### Survival Analysis
+```{r}
+## Import DEGs
+df_degs <- read.csv(paste0(output_path, "/df_volcano_degs_Patients_08.csv"))
+
+## Wrangling TPM
+df_tpm$gene_id <- NULL
+genes_down_regulated <- df_degs %>% 
+  filter(Expression == "Up-regulated")
+
+## Filtering on genes considering DEGs Up downregulated and tumor patients
+df_tpm_filtered <- df_tpm %>% 
+  filter(df_tpm$gene_name %in% genes_down_regulated$X) %>% 
+  dplyr::select(gene_name, matches("T$"))
+
+## Transpose ---> Patient x Gene
+rownames(df_tpm_filtered) <- make.names(df_tpm_filtered$gene_name, unique = TRUE)
+df_tpm_filtered$gene_name <- NULL
+df_tpm_filtered <- data.frame(t(df_tpm_filtered))
+
+## Add Id Column
+rownames(df_tpm_filtered) <- gsub("\\.1T$", "", rownames(df_tpm_filtered))
+rownames(df_tpm_filtered) <- gsub("\\.", "-", rownames(df_tpm_filtered))
+df_tpm_filtered$ID <- rownames(df_tpm_filtered)
+```
+
+```{r}
+## Plot
+ggplot(df_clinical_survival, aes(x = Response)) +
+  geom_bar(aes(fill = Response)) +
+  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+  labs(title = "Response Distribution", x = "", y = "Count") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#E74C3C", "#2E9FDF", "#56B4E9"))
+```
+
+```{r}
+## Survival Analysis
+
+## OS 
+fit_os <- survfit(Surv(OS_time, OS_Event) ~ Response, data = df_clinical_survival)
+## Plot
+ggsurv_os <- ggsurvplot(fit_os, data = df_clinical_survival,
+             pval = TRUE, conf.int = FALSE, palette = c("#E74C3C", "#F39C12", "#3498DB"),
+             xlim = c(0, 160), xlab = "Months",
+             ylab = "OS Probability", break.time.by = 10,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+## Add title
+ggsurv_os$plot + ggtitle("Overall Survival Analysis")
+
+## PFS Survival
+fit_pfs <- survfit(Surv(PFS_time, as.numeric(PFS_event)) ~ Response, data = df_clinical_survival)
+## Plot
+ggsurv_fps <- ggsurvplot(fit_pfs, data = df_clinical_survival,
+             pval = TRUE, conf.int = FALSE, palette = c("#E74C3C", "#F39C12", "#3498DB"),
+             xlim = c(0, 100), xlab = "Months",
+             ylab = "PFS Probability", break.time.by = 10,
+             ggtheme = theme_light(),
+             risk.table.y.text.col = TRUE,
+             risk.table.height = 0.25,
+             risk.table.y.text = FALSE,
+             conf.int.style = "step",
+             surv.median.line = "hv")
+## Add title
+ggsurv_fps$plot + ggtitle("Progression Free Survival Analysis")
+```
+
+```{r}
+## Merge
+df_final_survival <- merge(df_clinical_survival, df_tpm_filtered, by = "ID")
+
+## Select columns to exclude for testing
+columns_to_exlude <- c("ID", "OS_time", "OS_Event", "PFS_time", "PFS_event",
+                       "Coorte", "CT1L_1SI", "CT1L_FLOT_1SI")
+## Filter
+## Variable: Response
+res <- df_final_survival %>% 
+  dplyr::select(-all_of(columns_to_exlude)) %>% 
+  kruskal_test_on_genes(condition_col = "Response") %>% 
+  filter(p_value <= 0.05) 
+
+## Wilcox Test
+## Initialize an empty vector to store p-values
+# p_value_list <- c()
+## Select the gene columns 
+# gene_columns <- colnames(df_final_survival[,10:dim(df_final_survival)[[2]]])
+## Loop through each gene column
+# for (i in seq_along(gene_columns)) {
+#   gene <- gene_columns[i]
+#   ## Perform Wilcox test, comparing gene values across the levels of Response
+#   wilcox_res <- wilcox.test(as.numeric(df_final_survival[[gene]]) ~ df_final_survival$Response)
+#   ## Store the p-value in the p_value_list
+#   p_value_list[i] <- wilcox_res$p.value
+# }
+## Combine the results into a data frame with gene names and their corresponding p-values
+# results_df <- data.frame(
+#   Gene = gene_columns,
+#   P_value = p_value_list)
+## Filter
+# results_df <- results_df %>% 
+#   filter(P_value <= 0.05)
+
+## Plot
+plots_boxplot_kruskal <- plot_kruskal_boxplot(df_final_survival, "Response")
+# plots_boxplot_wilcox  <- plot_wilcox_boxplot(df_final_survival, "Response")
+
+## Print
+res
+# results_df
+```
+
+```{r}
+## Plot Significantly genes (Kruskal)
+for (gene in rownames(res)){
+  print(plots_boxplot_kruskal[[gene]])
+}
+
+# ## Plot Significantly genes (Wilcox)
+# for (gene in results_df$Gene){
+#   print(plots_boxplot_wilcox[[gene]])
+# }
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
