@@ -17,8 +17,8 @@ library(maptools)
 data <- "C:/Users/david/Documents/IFO/Final_Pipeline_Code/GSE14208_SurvivalData.txt"
 
 ## Load data
-gset <- getGEO("GSE14210")[[1]]
-df_clinical <- read.table(data, header = TRUE, sep = "\t")
+gset <- getGEO("GSE15459")[[1]]
+df_clinical <- my_data <- read_excel("GSE15459_outcome.xls")
 
 ## Wrangling
 df_clinical$ID <- gsub("\\.CEL$", "", df_clinical$ID)
@@ -74,18 +74,23 @@ genes_set <- as.list(genes_set)
 
 ## Gene Expression
 df_gene_expression <- exprs(gset)
+df_gene_expression <- data.frame(df_gene_expression)
+df_gene_expression_log2_transformed <- mutate_if(df_gene_expression, is.numeric, log2)
 
 ## Gene Set Annotation
 df_gene_set <- fData(gset)
 
 ## Clinical Information
 sample_info <- pData(gset)
+names(sample_info)[names(sample_info) == "title"] <- "ID"
+## Merge
+df_clinical_merged <- merge(df_clinical, sample_info, by = "ID")
 
 ## ***************************************
 ## SSGSEA
 ## ***************************************
 ## Compute own tpm
-system.time(assign("res", ssgsea(as.matrix(df_gene_expression), genes_set,
+system.time(assign("res", ssgsea(as.matrix(df_gene_expression_log2_transformed), genes_set,
                                  scale = TRUE, norm = TRUE)))
 ## Transpose
 res_transposed  <- t(res)
@@ -97,12 +102,100 @@ res_own_transposed  <- t(res_own)
 ## Df
 res_own_transposed  <- data.frame(res_own_transposed)
 
+## ***************************************
+## SURVIVAL ANALYSIS
+## ***************************************
+## Set t
+max_months <- 44
+t <- 0
+res_own_transposed <- res_own_transposed %>%
+  mutate(Signature = case_when(Genes >= t ~ "High",
+                               Genes <  t ~ "Low"))
+res_own_transposed$geo_accession <- rownames(res_own_transposed)
+## Merge
+res_own_transposed_merged <- merge(res_own_transposed, df_clinical_merged, by = "geo_accession")
+## Check
+table(res_own_transposed$Signature)
+## OS
+p_os_status_distribution <- ggplot(res_own_transposed_merged, aes(x = Signature)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)),
+           fill = c("#E74C3C", "#3498DB"), color = c("#E74C3C", "#3498DB"), alpha = 0.8) + 
+  geom_text(aes(label = paste0(..count.., " (", round((..count..)/sum(..count..) * 100, 1), "%)"), 
+                y = (..count..)/sum(..count..)), 
+            stat = "count", vjust = -0.5, size = 5, fontface = "bold") + 
+  scale_y_continuous(labels = percent_format()) + 
+  labs(title = "OS Status Distribution - Micro-Array", 
+       x = "Signature",
+       y = "Percentage") +
+  theme_classic(base_size = 14, base_family = "Arial") + 
+  theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 14, face = "italic", hjust = 0.5),  
+        axis.title.x = element_text(vjust = -0.5),  
+        axis.title.y = element_text(vjust = 1.5),   
+        axis.text.x = element_text(face = "bold"),  
+        axis.text.y = element_text(face = "bold"), 
+        panel.grid.major = element_line(color = "gray90"), 
+        panel.grid.minor = element_blank(),  
+        legend.position = "none")
+p_os_status_distribution
 
+## Fit model
+fit_os_own <- survfit(Surv(overallSurvival_mo, as.integer(death1_censor0)) ~ Signature,
+                      data = res_own_transposed_merged)
+## Plot
+os_plot_own <- ggsurvplot(fit_os_own, data = res_own_transposed_merged,
+                          risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                          palette = c("#E74C3C", "#3498DB"),  
+                          xlim = c(0, max_months),  
+                          title = "OS - IRE",  
+                          xlab = "Time (Months)",  ylab = "Survival Probability", 
+                          break.time.by = 4,  
+                          ggtheme = theme_classic(base_size = 16), 
+                          risk.table.y.text.col = TRUE, risk.table.height = 0.25,  
+                          risk.table.y.text = TRUE, conf.int.style = "step",  
+                          surv.median.line = "hv",  
+                          pval.size = 6,  
+                          font.title = c(18, "bold"), 
+                          font.subtitle = c(14, "italic"), 
+                          font.x = c(14, "plain"),  
+                          font.y = c(14, "plain"),  
+                          font.tickslab = c(12, "plain"),  
+                          legend.title = "Group",  
+                          legend.labs = c("Group 1 - High", "Group 2 - Low"), 
+                          legend = c(0.85, 0.85),  
+                          risk.table.fontsize = 3.5)
+os_plot_own
 
+## Plot single genes
+si_probs <-  c("212298_at", "212334_at", "212203_x_at", "202828_s_at",
+                   "212486_s_at", "209118_s_at", "207643_s_at", "210042_s_at")
+no_probs <- c("201373_at", "201374_x_at", "201375_s_at", "201376_s_at",
+              "201377_at", "201378_s_at", "201379_s_at", "201380_at")
+final_probs <- c(si_probs, no_probs)
+df_support <- df_gene_expression_log2_transformed %>% 
+  filter(rownames(df_gene_expression_log2_transformed) %in% final_probs)
+df_support <- t(df_support)
+df_support <- data.frame(df_support)
+df_support$geo_accession <- rownames(df_support)
+res_own_transposed_merged_filter <- res_own_transposed_merged %>% 
+  dplyr::select(colnames(res_own_transposed_merged)[1:10])
+## Merge
+df_final_single_test_gene <- merge(res_own_transposed_merged_filter, df_support, by = "geo_accession")
 
-
-
-
-
+## Plot Single Gene
+plots <- list()
+g     <- colnames(df_final_single_test_gene)[11:26]
+dt    <- data.frame(c(),c())
+i     <- 11
+gg    <- df_final_single_test_gene[11:26]
+for(g in gg){
+  df_final_single_test_gene$Group <- ifelse(df_final_single_test_gene[,i] > median(df_final_single_test_gene[,i], na.rm = TRUE), "High", "Low")
+  fit <-survfit(Surv(overallSurvival_mo, death1_censor0) ~ Group, data = df_final_single_test_gene)
+  p <- ggsurvplot(fit, title = colnames(df_final_single_test_gene[i]),  pval = TRUE, conf.int = FALSE,
+                  risk.table = TRUE, risk.table.y.text.col = TRUE,
+                  palette = c("#E74C3C", "#3498DB"))
+  print(p)
+  i <- i+1
+}
 
 
