@@ -13,17 +13,7 @@ library(maptools)
 ## GSE62254 (N = 300)
 
 ## Load data
-gset_GSE14210 <- getGEO("GSE14210", GSEMatrix = TRUE, getGPL = FALSE)
-if (length(gset_GSE14210) > 1) idx <- grep("GPL570", attr(gset_GSE14210, "names")) else idx <- 1
-gset_GSE14210 <- gset_GSE14210[[idx]]
-ex <- exprs(gset_GSE14210)
-
-## Log2 transform
-qx <- as.numeric(quantile(ex, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm = T))
-LogC <- (qx[5] > 100) ||
-  (qx[6]-qx[1] > 50 && qx[2] > 0)
-if (LogC) { ex[which(ex <= 0)] <- NaN
-ex <- log2(ex)}
+gset <- getGEO("GSE14210")[[1]]
 
 ## Genes
 genes <- c("GNAI2", "RSU1", "NRP1", "GNS", "IFITM3",
@@ -47,57 +37,40 @@ genes <- c("GNAI2", "RSU1", "NRP1", "GNS", "IFITM3",
            "DLGAP4", "DENND3", "HCLS1", "LAMB3", "FIBP",
            "NAMPT", "MARS", "CTSA", "EIF3E", "LGALS8",
            "CYR61", "LGALS9")
-probs <- c("201040_at", "230490_x_at", "212298_at", "212334_at", "202828_s_at",
-           "212486_s_at", "209118_s_at", "207643_s_at", "210042_s_at", "201560_at",
-           "207196_s_at", "208747_s_at", "200989_at", "227068_at", "212829_at",
-           "201105_at", "212667_at", "207714_s_at", "201749_at", "235318_at",
-           "217733_s_at", "200932_s_at", "208690_s_at", "211858_x_at", "202806_at",
-           "201508_at", "200766_at", "217767_at", "200057_s_at", "211945_s_at",
-           "227308_x_at", "225673_at", "209082_s_at", "212097_at", "203507_at",
-           "202214_s_at", "212067_s_at", "218638_s_at", "203505_at", "200055_at",
-           "203729_at", "222235_s_at", "212063_at", "211284_s_at", "201136_at",
-           "222026_at", "221816_s_at", "202796_at", "201864_at", "202295_s_at",
-           "218854_at", "208869_s_at", "239952_at", "211662_s_at", "218284_at",
-           "201889_at", "201426_s_at", "201994_at", "217765_at", "201300_s_at",
-           "209191_at", "200833_s_at", "228910_at", "203413_at", "201807_at",
-           "211012_s_at", "205547_s_at", "200051_at", "1554149_at", "202628_s_at",
-           "200743_s_at", "205480_s_at", "202472_at", "201850_at", "203789_s_at",
-           "216620_s_at", "225522_at", "225320_at", "209360_s_at", "205227_at",
-           "201082_s_at", "202607_at", "208970_s_at", "223192_at", "228415_at",
-           "216438_s_at", "202800_at", "202572_s_at", "212974_at", "202957_at",
-           "209270_at", "202041_s_at", "217738_at", "213671_s_at", "200661_at",
-           "208697_s_at", "210731_s_at", "201289_at", "203236_s_at")
+## Probs
+probs <- c("201040_at", "230490_x_at", "212298_at", "212334_at", "212203_x_at",
+           "202828_s_at", "212486_s_at", "209118_s_at", "207643_s_at", "210042_s_at",
+           "201560_at", "207196_s_at", "208747_s_at", "200989_at", "227068_at",
+           "212829_at", "201105_at", "212667_at", "207714_s_at", "201749_at",
+           "235318_at", "217733_s_at", "200932_s_at", "208690_s_at", "211858_x_at",
+           "202806_at", "201508_at", "200766_at", "217767_at", "200057_s_at",
+           "211945_s_at", "227308_x_at", "225673_at", "209082_s_at", "212097_at",
+           "203507_at", "202214_s_at", "212067_s_at", "218638_s_at", "203505_at",
+           "200055_at", "203729_at", "222235_s_at", "212063_at", "211284_s_at",
+           "201136_at", "222026_at", "221816_s_at", "202796_at", "201864_at",
+           "202295_s_at", "218854_at", "208869_s_at", "239952_at", "211662_s_at",
+           "218284_at", "201889_at", "201426_s_at", "201994_at", "217765_at",
+           "201300_s_at", "209191_at", "200833_s_at", "228910_at", "202211_at",
+           "203413_at", "201807_at", "211012_s_at", "205547_s_at", "200051_at",
+           "1554149_at", "202628_s_at", "226633_at", "200743_s_at", "205480_s_at",
+           "202472_at", "201850_at", "203789_s_at", "216620_s_at", "225522_at",
+           "225320_at", "209360_s_at", "205227_at", "201082_s_at", "202607_at",
+           "208970_s_at", "223192_at", "228415_at", "216438_s_at", "202800_at",
+           "202572_s_at", "212974_at", "202957_at", "209270_at", "202041_s_at",
+           "217738_at", "213671_s_at", "200661_at", "208697_s_at", "210731_s_at",
+           "201289_at", "203236_s_at")
 
-## ************************************************************
-## Check normalization
-pData(gset_GSE14210)$data_processing[1]
+## Gene Expression
+df_gene_expression <- exprs(gset)
+View(df_gene_expression)
 
-## Look on the expression value
-summary(exprs(gset_GSE14210))
+## Gene Set Annotation
+df_gene_set <- fData(gset)
+View(df_gene_set)
 
-## Boxplot
-boxplot(exprs(gset_GSE14210), outline = F)
-
-## ************************************************************
-## Clinical Annotation
-sample_info <- pData(gset_GSE14210)
-head(sample_info)
-
-## Check
-table(sample_info$characteristics_ch1.1)
-
-
-
-
-
-
-
-
-
-
-
-
-
+## Clinical Information
+df_clinical <- pData(gset)
+View(df_clinical)
 
 
 
