@@ -1,4 +1,5 @@
 ## Load useful
+source("00_SUpport_ssGSEA.R")
 library(GEOquery)
 library(limma)
 library(umap)
@@ -12,8 +13,15 @@ library(maptools)
 ## GSE51105 (N = 94)
 ## GSE62254 (N = 300)
 
+## Set data path
+data <- "C:/Users/david/Documents/IFO/Final_Pipeline_Code/GSE14208_SurvivalData.txt"
+
 ## Load data
 gset <- getGEO("GSE14210")[[1]]
+df_clinical <- read.table(data, header = TRUE, sep = "\t")
+
+## Wrangling
+df_clinical$ID <- gsub("\\.CEL$", "", df_clinical$ID)
 
 ## Genes
 genes <- c("GNAI2", "RSU1", "NRP1", "GNS", "IFITM3",
@@ -60,21 +68,34 @@ probs <- c("201040_at", "230490_x_at", "212298_at", "212334_at", "212203_x_at",
            "217738_at", "213671_s_at", "200661_at", "208697_s_at", "210731_s_at",
            "201289_at", "203236_s_at")
 
+## Combine dataframe
+genes_set <- data.frame(Genes = probs)
+genes_set <- as.list(genes_set)
+
 ## Gene Expression
 df_gene_expression <- exprs(gset)
-View(df_gene_expression)
 
 ## Gene Set Annotation
 df_gene_set <- fData(gset)
-View(df_gene_set)
 
 ## Clinical Information
-df_clinical <- pData(gset)
-View(df_clinical)
+sample_info <- pData(gset)
 
-
-
-
+## ***************************************
+## SSGSEA
+## ***************************************
+## Compute own tpm
+system.time(assign("res", ssgsea(as.matrix(df_gene_expression), genes_set,
+                                 scale = TRUE, norm = TRUE)))
+## Transpose
+res_transposed  <- t(res)
+## Z-Score the ssgsea output for comparative analysis
+res_own <- (res - rowMeans(res))/
+  (rowSds(as.matrix(res)))[row(res)]
+## Transpose
+res_own_transposed  <- t(res_own)
+## Df
+res_own_transposed  <- data.frame(res_own_transposed)
 
 
 
