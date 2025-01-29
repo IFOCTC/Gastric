@@ -83,42 +83,42 @@ names(sample_info_GSE14210)[names(sample_info_GSE14210) == "title"] <- "ID"
 ## Expression
 df_expression_GSE14210 <- exprs(gset_GSE14210)
 df_expression_GSE15459 <- exprs(gset_GSE15459)
-df_expression_GSE22377 <- exprs(gset_GSE22377)
-df_expression_GSE29272 <- exprs(gset_GSE29272)
-df_expression_GSE51105 <- exprs(gset_GSE51105)
-df_expression_GSE62254 <- exprs(gset_GSE62254)
+# df_expression_GSE22377 <- exprs(gset_GSE22377)
+# df_expression_GSE29272 <- exprs(gset_GSE29272)
+# df_expression_GSE51105 <- exprs(gset_GSE51105)
+# df_expression_GSE62254 <- exprs(gset_GSE62254)
 
 ## Check
 dim(df_expression_GSE14210)
 dim(df_expression_GSE15459)
-dim(df_expression_GSE22377)
-dim(df_expression_GSE29272)
-dim(df_expression_GSE51105)
-dim(df_expression_GSE62254)
+# dim(df_expression_GSE22377)
+# dim(df_expression_GSE29272)
+# dim(df_expression_GSE51105)
+# dim(df_expression_GSE62254)
 
 ## Format
 df_expression_GSE14210 <- data.frame(df_expression_GSE14210)
 df_expression_GSE15459 <- data.frame(df_expression_GSE15459)
-df_expression_GSE22377 <- data.frame(df_expression_GSE22377)
-df_expression_GSE29272 <- data.frame(df_expression_GSE29272)
-df_expression_GSE51105 <- data.frame(df_expression_GSE51105)
-df_expression_GSE62254 <- data.frame(df_expression_GSE62254)
+# df_expression_GSE22377 <- data.frame(df_expression_GSE22377)
+# df_expression_GSE29272 <- data.frame(df_expression_GSE29272)
+# df_expression_GSE51105 <- data.frame(df_expression_GSE51105)
+# df_expression_GSE62254 <- data.frame(df_expression_GSE62254)
 
 ## Add ID Column
 df_expression_GSE14210$ID <- rownames(df_expression_GSE14210)
 df_expression_GSE15459$ID <- rownames(df_expression_GSE15459)
-df_expression_GSE22377$ID <- rownames(df_expression_GSE22377)
-df_expression_GSE29272$ID <- rownames(df_expression_GSE29272)
-df_expression_GSE51105$ID <- rownames(df_expression_GSE51105)
-df_expression_GSE62254$ID <- rownames(df_expression_GSE62254)
+# df_expression_GSE22377$ID <- rownames(df_expression_GSE22377)
+# df_expression_GSE29272$ID <- rownames(df_expression_GSE29272)
+# df_expression_GSE51105$ID <- rownames(df_expression_GSE51105)
+# df_expression_GSE62254$ID <- rownames(df_expression_GSE62254)
 
 ## Add label dataset
 df_expression_GSE14210$Label_GSE14210 <- rep("GSE14210", length(rownames(df_expression_GSE14210)))
 df_expression_GSE15459$Label_GSE15459 <- rep("GSE15459", length(rownames(df_expression_GSE15459)))
-df_expression_GSE22377$Label_GSE22377 <- rep("GSE22377", length(rownames(df_expression_GSE22377)))
-df_expression_GSE29272$Label_GSE29272 <- rep("GSE29272", length(rownames(df_expression_GSE29272)))
-df_expression_GSE51105$Label_GSE51105 <- rep("GSE51105", length(rownames(df_expression_GSE51105)))
-df_expression_GSE62254$Label_GSE62254 <- rep("GSE62254", length(rownames(df_expression_GSE62254)))
+# df_expression_GSE22377$Label_GSE22377 <- rep("GSE22377", length(rownames(df_expression_GSE22377)))
+# df_expression_GSE29272$Label_GSE29272 <- rep("GSE29272", length(rownames(df_expression_GSE29272)))
+# df_expression_GSE51105$Label_GSE51105 <- rep("GSE51105", length(rownames(df_expression_GSE51105)))
+# df_expression_GSE62254$Label_GSE62254 <- rep("GSE62254", length(rownames(df_expression_GSE62254)))
 
 ## Merge for gene expression
 dfs <- list(df_expression_GSE14210, df_expression_GSE15459)
@@ -136,14 +136,14 @@ df_expression_GSE14210$ID <- NULL
 df_expression_GSE14210$Label_GSE14210 <- NULL
 df_expression_GSE15459$ID <- NULL
 df_expression_GSE15459$Label_GSE15459 <- NULL
-df_expression_GSE22377$ID <- NULL
-df_expression_GSE22377$Label_GSE22377 <- NULL
-df_expression_GSE29272$ID <- NULL
-df_expression_GSE29272$Label_GSE29272 <- NULL
-df_expression_GSE51105$ID <- NULL
-df_expression_GSE51105$Label_GSE51105 <- NULL
-df_expression_GSE62254$ID <- NULL
-df_expression_GSE62254$Label_GSE62254 <- NULL
+# df_expression_GSE22377$ID <- NULL
+# df_expression_GSE22377$Label_GSE22377 <- NULL
+# df_expression_GSE29272$ID <- NULL
+# df_expression_GSE29272$Label_GSE29272 <- NULL
+# df_expression_GSE51105$ID <- NULL
+# df_expression_GSE51105$Label_GSE51105 <- NULL
+# df_expression_GSE62254$ID <- NULL
+# df_expression_GSE62254$Label_GSE62254 <- NULL
 
 ## Merge
 df_clinical_merged_GSE14210 <- merge(df_clinical_GSE14210, sample_info_GSE14210, by = "ID")
@@ -161,90 +161,6 @@ df_clinical_01 <- df_clinical_01 %>%
 df_clinical_02 <- df_clinical_02 %>%
   rename(OS_Time = `Overall.Survival (Months)**`, OS_Event = `Outcome (1=dead)`)
 df_clinical_final <- rbind(df_clinical_01, df_clinical_02)
-
-## ***************************************
-## SSGSEA - TWO DATASETS
-## ***************************************
-## Compute own tpm
-df_final_merged$ID <- NULL
-df_final_merged$Label_GSE14210 <- NULL
-df_final_merged$Label_GSE15459 <- NULL
-system.time(assign("res", ssgsea(as.matrix(df_final_merged), genes_set,
-                                          scale = TRUE, norm = TRUE)))
-## Transpose
-res_transposed  <- t(res)
-## Z-Score the ssgsea output for comparative analysis
-res_own <- (res - rowMeans(res))/
-  (rowSds(as.matrix(res)))[row(res)]
-## Transpose
-res_own_transposed  <- t(res_own)
-## Df
-res_own_transposed  <- data.frame(res_own_transposed)
-
-## ***************************************
-## SURVIVAL ANALYSIS - TWO DATASETS
-## ***************************************
-## Set t
-max_months <- 44
-t <- 0
-res_own_transposed <- res_own_transposed %>%
-  mutate(Signature = case_when(Genes >= t ~ "High",
-                               Genes <  t ~ "Low"))
-res_own_transposed$geo_accession <- rownames(res_own_transposed)
-## Merge
-res_own_transposed_merged <- merge(res_own_transposed, df_clinical_final, by = "geo_accession")
-## Check
-table(res_own_transposed$Signature)
-
-## OS
-p_os_status_distribution <- ggplot(res_own_transposed_merged, aes(x = Signature)) +
-  geom_bar(aes(y = (..count..)/sum(..count..)),
-           fill = c("#E74C3C", "#3498DB"), color = c("#E74C3C", "#3498DB"), alpha = 0.8) + 
-  geom_text(aes(label = paste0(..count.., " (", round((..count..)/sum(..count..) * 100, 1), "%)"), 
-                y = (..count..)/sum(..count..)), 
-            stat = "count", vjust = -0.5, size = 5, fontface = "bold") + 
-  scale_y_continuous(labels = percent_format()) + 
-  labs(title = "OS Status Distribution - Micro-Array",
-       subtitle = "GSE14210 + GSE15459",
-       x = "Signature",
-       y = "Percentage") +
-  theme_classic(base_size = 14, base_family = "Arial") + 
-  theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 14, face = "italic", hjust = 0.5),  
-        axis.title.x = element_text(vjust = -0.5),  
-        axis.title.y = element_text(vjust = 1.5),   
-        axis.text.x = element_text(face = "bold"),  
-        axis.text.y = element_text(face = "bold"), 
-        panel.grid.major = element_line(color = "gray90"), 
-        panel.grid.minor = element_blank(),  
-        legend.position = "none")
-p_os_status_distribution
-## Fit model
-fit_os <- survfit(Surv(OS_Time, as.integer(OS_Event)) ~ Signature,
-                  data = res_own_transposed_merged)
-## Plot
-os_plot <- ggsurvplot(fit_os, data = res_own_transposed_merged,
-                      risk.table = TRUE, pval = TRUE, conf.int = FALSE,
-                      palette = c("#E74C3C", "#3498DB"),  
-                      xlim = c(0, max_months),  
-                      title = "OS",  subtitle = "GSE14210 + GSE15459",
-                      xlab = "Time (Months)",  ylab = "Survival Probability", 
-                      break.time.by = 4,  
-                      ggtheme = theme_classic(base_size = 16), 
-                      risk.table.y.text.col = TRUE, risk.table.height = 0.25,  
-                      risk.table.y.text = TRUE, conf.int.style = "step",  
-                      surv.median.line = "hv",  
-                      pval.size = 6,  
-                      font.title = c(18, "bold"), 
-                      font.subtitle = c(14, "italic"), 
-                      font.x = c(14, "plain"),  
-                      font.y = c(14, "plain"),  
-                      font.tickslab = c(12, "plain"),  
-                      legend.title = "Group",  
-                      legend.labs = c("Group 1 - High", "Group 2 - Low"), 
-                      legend = c(0.85, 0.85),  
-                      risk.table.fontsize = 3.5)
-os_plot
 
 ## ***************************************
 ## SSGSEA - GSE14210
@@ -437,3 +353,76 @@ os_plot_GSE15459 <- ggsurvplot(fit_os_GSE15459, data = res_own_transposed_merged
                                legend = c(0.85, 0.85),  
                                risk.table.fontsize = 3.5)
 os_plot_GSE15459
+
+## ***************************************
+## SURVIVAL ANALYSIS MERGED DATASETS
+## ***************************************
+## Select useful columns
+res_own_transposed_merged_GSE14210_filtered <- res_own_transposed_merged_GSE14210 %>% 
+  dplyr::select(c(geo_accession, Genes, Signature))
+res_own_transposed_merged_GSE15459_filtered <- res_own_transposed_merged_GSE15459 %>% 
+  dplyr::select(c(geo_accession, Genes, Signature))
+df_final_merged <- rbind(res_own_transposed_merged_GSE14210_filtered,
+                         res_own_transposed_merged_GSE15459_filtered)
+df_final <- merge(df_final_merged, df_clinical_final, by = "geo_accession") 
+
+## OS
+p_os_status_distribution <- ggplot(df_final, aes(x = Signature)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)),
+           fill = c("#E74C3C", "#3498DB"), color = c("#E74C3C", "#3498DB"), alpha = 0.8) + 
+  geom_text(aes(label = paste0(..count.., " (", round((..count..)/sum(..count..) * 100, 1), "%)"), 
+                y = (..count..)/sum(..count..)), 
+            stat = "count", vjust = -0.5, size = 5, fontface = "bold") + 
+  scale_y_continuous(labels = percent_format()) + 
+  labs(title = "OS Status Distribution - Micro-Array",
+       subtitle = "GSE14210 + GSE15459",
+       x = "Signature",
+       y = "Percentage") +
+  theme_classic(base_size = 14, base_family = "Arial") + 
+  theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 14, face = "italic", hjust = 0.5),  
+        axis.title.x = element_text(vjust = -0.5),  
+        axis.title.y = element_text(vjust = 1.5),   
+        axis.text.x = element_text(face = "bold"),  
+        axis.text.y = element_text(face = "bold"), 
+        panel.grid.major = element_line(color = "gray90"), 
+        panel.grid.minor = element_blank(),  
+        legend.position = "none")
+p_os_status_distribution
+## Fit model
+fit_os <- survfit(Surv(OS_Time, as.integer(OS_Event)) ~ Signature,
+                  data = df_final)
+## Plot
+os_plot <- ggsurvplot(fit_os, data = df_final,
+                      risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                      palette = c("#E74C3C", "#3498DB"),  
+                      xlim = c(0, 48),  
+                      title = "OS",  subtitle = "GSE14210 + GSE15459",
+                      xlab = "Time (Months)",  ylab = "Survival Probability", 
+                      break.time.by = 4,  
+                      ggtheme = theme_classic(base_size = 16), 
+                      risk.table.y.text.col = TRUE, risk.table.height = 0.25,  
+                      risk.table.y.text = TRUE, conf.int.style = "step",  
+                      surv.median.line = "hv",  
+                      pval.size = 6,  
+                      font.title = c(18, "bold"), 
+                      font.subtitle = c(14, "italic"), 
+                      font.x = c(14, "plain"),  
+                      font.y = c(14, "plain"),  
+                      font.tickslab = c(12, "plain"),  
+                      legend.title = "Group",  
+                      legend.labs = c("Group 1 - High", "Group 2 - Low"), 
+                      legend = c(0.85, 0.85),  
+                      risk.table.fontsize = 3.5)
+os_plot
+
+
+
+
+
+
+
+
+
+
+
