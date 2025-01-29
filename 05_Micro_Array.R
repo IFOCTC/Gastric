@@ -1,5 +1,5 @@
 ## Load useful
-source("00_SUpport_ssGSEA.R")
+source("00_Support_ssGSEA.R")
 library(GEOquery)
 library(limma)
 library(umap)
@@ -14,16 +14,34 @@ library(affy)
 ## GSE51105 (N = 94)
 ## GSE62254 (N = 300)
 
+## *********************
+## LOAD DATA
+## *********************
 ## Set data path
-data <- "C:/Users/david/Documents/IFO/Final_Pipeline_Code/GSE14208_SurvivalData.txt"
+dest_dir = "C:/Users/david/Documents/IFO/Final_Pipeline_Code/"
 
-## Load data
-gset_GSE14210 <- getGEO("GSE14210", destdir = tempdir())
-gset_GSE15459 <- getGEO("GSE15459", destdir = tempdir())
-gset_GSE22377 <- getGEO("GSE22377", destdir = tempdir())
-gset_GSE29272 <- getGEO("GSE29272", destdir = tempdir())
-gset_GSE51105 <- getGEO("GSE51105", destdir = tempdir())
-gset_GSE62254 <- getGEO("GSE62254", destdir = tempdir())
+## Load data expression
+options(timeout = max(300, getOption("timeout")))
+gset_GSE14210 <- getGEO("GSE14210", destdir = dest_dir)
+gset_GSE15459 <- getGEO("GSE15459", destdir = dest_dir)
+gset_GSE22377 <- getGEO("GSE22377", destdir = dest_dir)
+gset_GSE29272 <- getGEO("GSE29272", destdir = dest_dir)
+gset_GSE51105 <- getGEO("GSE62254", destdir = dest_dir)
+gset_GSE62254 <- getGEO("GSE62254", destdir = dest_dir)
+
+## Clinical
+df_clinical_GSE14210 <- read.table("GSE14208_SurvivalData.txt", header = TRUE)
+df_clinical_GSE15459 <- read_excel("GSE15459_outcome.xls")
+df_clinical_GSE22377
+df_clinical_GSE29272
+df_clinical_GSE51105
+
+## Format ID
+df_clinical_GSE14210$ID <- gsub("\\.CEL$", "", df_clinical_GSE14210$ID)
+
+## *********************
+## WRANGLING
+## *********************
 
 ## Extract
 gset_GSE14210 <- gset_GSE14210[[1]]
@@ -60,12 +78,20 @@ df_expression_GSE22377$ID <- rownames(df_expression_GSE22377)
 df_expression_GSE29272$ID <- rownames(df_expression_GSE29272)
 df_expression_GSE51105$ID <- rownames(df_expression_GSE51105)
 
-## Clinical
-df_clinical_GSE14210 <- read.table("GSE14208_SurvivalData.txt", header = TRUE)
-df_clinical_GSE15459 <- read_excel("GSE15459_outcome.xls")
+## Add label dataset
+df_expression_GSE14210$Label_GSE14210 <- rep("GSE14210", rownames(df_expression_GSE14210))
+df_expression_GSE15459$Label_GSE15459 <- rep("GSE15459", rownames(df_expression_GSE15459))
+df_expression_GSE22377$Label_GSE22377 <- rep("GSE22377", rownames(df_expression_GSE22377))
+df_expression_GSE29272$Label_GSE29272 <- rep("GSE29272", rownames(df_expression_GSE29272))
+df_expression_GSE51105$Label_GSE51105 <- rep("GSE51105", rownames(df_expression_GSE51105))
 
-## Wrangling
-df_clinical$ID <- gsub("\\.CEL$", "", df_clinical$ID)
+## Merge
+dfs <- list(df_expression_GSE14210, df_expression_GSE15459, df_expression_GSE22377,
+            df_expression_GSE29272, df_expression_GSE51105)
+df_final_merged <- Reduce(function(x, y) merge(x, y, by = "ID"), dfs)
+
+## Check
+dim(df_final_merged)
 
 ## Genes
 genes <- c("GNAI2", "RSU1", "NRP1", "GNS", "IFITM3",
@@ -117,34 +143,30 @@ genes_set <- data.frame(Genes = probs)
 genes_set <- as.list(genes_set)
 
 ## Gene Expression
-df_gene_expression <- exprs(gset)
-df_gene_expression <- data.frame(df_gene_expression)
-df_gene_expression_log2_transformed <- mutate_if(df_gene_expression, is.numeric, log2)
-
-## Gene Set Annotation
-df_gene_set <- fData(gset)
+df_gene_expression_GSE14210 <- exprs(gset_GSE14210)
+df_gene_expression_GSE14210 <- data.frame(df_gene_expression_GSE14210)
 
 ## Clinical Information
-sample_info <- pData(gset)
-names(sample_info)[names(sample_info) == "title"] <- "ID"
+sample_info_GSE14210 <- pData(gset_GSE14210)
+names(sample_info_GSE14210)[names(sample_info_GSE14210) == "title"] <- "ID"
 ## Merge
-df_clinical_merged <- merge(df_clinical, sample_info, by = "ID")
+df_clinical_merged_GSE14210 <- merge(df_clinical_GSE14210, sample_info_GSE14210, by = "ID")
 
 ## ***************************************
 ## SSGSEA
 ## ***************************************
 ## Compute own tpm
-system.time(assign("res", ssgsea(as.matrix(df_gene_expression_log2_transformed), genes_set,
+system.time(assign("res_GSE14210", ssgsea(as.matrix(df_gene_expression_GSE14210), genes_set,
                                  scale = TRUE, norm = TRUE)))
 ## Transpose
-res_transposed  <- t(res)
+res_transposed_GSE14210  <- t(res_GSE14210)
 ## Z-Score the ssgsea output for comparative analysis
-res_own <- (res - rowMeans(res))/
-  (rowSds(as.matrix(res)))[row(res)]
+res_own_GSE14210 <- (res_GSE14210 - rowMeans(res_GSE14210))/
+  (rowSds(as.matrix(res_GSE14210)))[row(res_GSE14210)]
 ## Transpose
-res_own_transposed  <- t(res_own)
+res_own_transposed_GSE14210  <- t(res_own_GSE14210)
 ## Df
-res_own_transposed  <- data.frame(res_own_transposed)
+res_own_transposed_GSE14210  <- data.frame(res_own_transposed_GSE14210)
 
 ## ***************************************
 ## SURVIVAL ANALYSIS
@@ -152,23 +174,25 @@ res_own_transposed  <- data.frame(res_own_transposed)
 ## Set t
 max_months <- 44
 t <- 0
-res_own_transposed <- res_own_transposed %>%
+res_own_transposed_GSE14210 <- res_own_transposed_GSE14210 %>%
   mutate(Signature = case_when(Genes >= t ~ "High",
                                Genes <  t ~ "Low"))
-res_own_transposed$geo_accession <- rownames(res_own_transposed)
+res_own_transposed_GSE14210$geo_accession <- rownames(res_own_transposed_GSE14210)
 ## Merge
-res_own_transposed_merged <- merge(res_own_transposed, df_clinical_merged, by = "geo_accession")
+res_own_transposed_merged_GSE14210 <- merge(res_own_transposed_GSE14210, df_clinical_merged_GSE14210, by = "geo_accession")
 ## Check
-table(res_own_transposed$Signature)
+table(res_own_transposed_GSE14210$Signature)
+
 ## OS
-p_os_status_distribution <- ggplot(res_own_transposed_merged, aes(x = Signature)) +
+p_os_status_distribution_GSE14210 <- ggplot(res_own_transposed_merged_GSE14210, aes(x = Signature)) +
   geom_bar(aes(y = (..count..)/sum(..count..)),
            fill = c("#E74C3C", "#3498DB"), color = c("#E74C3C", "#3498DB"), alpha = 0.8) + 
   geom_text(aes(label = paste0(..count.., " (", round((..count..)/sum(..count..) * 100, 1), "%)"), 
                 y = (..count..)/sum(..count..)), 
             stat = "count", vjust = -0.5, size = 5, fontface = "bold") + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(title = "OS Status Distribution - Micro-Array", 
+  labs(title = "OS Status Distribution - Micro-Array",
+       subtitle = "GSE14210",
        x = "Signature",
        y = "Percentage") +
   theme_classic(base_size = 14, base_family = "Arial") + 
@@ -181,17 +205,16 @@ p_os_status_distribution <- ggplot(res_own_transposed_merged, aes(x = Signature)
         panel.grid.major = element_line(color = "gray90"), 
         panel.grid.minor = element_blank(),  
         legend.position = "none")
-p_os_status_distribution
-
+p_os_status_distribution_GSE14210
 ## Fit model
-fit_os_own <- survfit(Surv(overallSurvival_mo, as.integer(death1_censor0)) ~ Signature,
-                      data = res_own_transposed_merged)
+fit_os_GSE14210 <- survfit(Surv(overallSurvival_mo, as.integer(death1_censor0)) ~ Signature,
+                           data = res_own_transposed_merged_GSE14210)
 ## Plot
-os_plot_own <- ggsurvplot(fit_os_own, data = res_own_transposed_merged,
+os_plot_GSE14210 <- ggsurvplot(fit_os_GSE14210, data = res_own_transposed_merged_GSE14210,
                           risk.table = TRUE, pval = TRUE, conf.int = FALSE,
                           palette = c("#E74C3C", "#3498DB"),  
                           xlim = c(0, max_months),  
-                          title = "OS - IRE",  
+                          title = "OS - IRE",  subtitle = "GSE14210",
                           xlab = "Time (Months)",  ylab = "Survival Probability", 
                           break.time.by = 4,  
                           ggtheme = theme_classic(base_size = 16), 
@@ -208,43 +231,35 @@ os_plot_own <- ggsurvplot(fit_os_own, data = res_own_transposed_merged,
                           legend.labs = c("Group 1 - High", "Group 2 - Low"), 
                           legend = c(0.85, 0.85),  
                           risk.table.fontsize = 3.5)
-os_plot_own
+os_plot_GSE14210
 
-## Plot single genes
-si_probs <-  c("212298_at", "212334_at", "212203_x_at", "202828_s_at",
-               "212486_s_at", "209118_s_at", "207643_s_at", "210042_s_at")
-no_probs <- c("201373_at", "201374_x_at", "201375_s_at", "201376_s_at",
-              "201377_at", "201378_s_at", "201379_s_at", "201380_at")
-final_probs <- c(si_probs, no_probs)
-df_support <- df_gene_expression_log2_transformed %>% 
-  filter(rownames(df_gene_expression_log2_transformed) %in% final_probs)
-df_support <- t(df_support)
-df_support <- data.frame(df_support)
-df_support$geo_accession <- rownames(df_support)
-res_own_transposed_merged_filter <- res_own_transposed_merged %>% 
-  dplyr::select(colnames(res_own_transposed_merged)[1:10])
-## Merge
-df_final_single_test_gene <- merge(res_own_transposed_merged_filter, df_support, by = "geo_accession")
-
-## Plot Single Gene
-plots <- list()
-g     <- colnames(df_final_single_test_gene)[11:26]
-dt    <- data.frame(c(),c())
-i     <- 11
-gg    <- df_final_single_test_gene[11:26]
-for(g in gg){
-  df_final_single_test_gene$Group <- ifelse(df_final_single_test_gene[,i] > median(df_final_single_test_gene[,i], na.rm = TRUE), "High", "Low")
-  fit <-survfit(Surv(overallSurvival_mo, death1_censor0) ~ Group, data = df_final_single_test_gene)
-  p <- ggsurvplot(fit, title = colnames(df_final_single_test_gene[i]),  pval = TRUE, conf.int = FALSE,
-                  risk.table = TRUE, risk.table.y.text.col = TRUE,
-                  palette = c("#E74C3C", "#3498DB"))
-  print(p)
-  i <- i+1
-}
-
-## Affy
-data <- ReadAffy()
-
+## PFS
+## Fit model
+fit_pfs_GSE14210 <- survfit(Surv(timeToProgression_mo, as.integer(progression1_censor0)) ~ Signature,
+                           data = res_own_transposed_merged_GSE14210)
+## Plot
+pfs_plot_GSE14210 <- ggsurvplot(fit_pfs_GSE14210, data = res_own_transposed_merged_GSE14210,
+                               risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                               palette = c("#E74C3C", "#3498DB"),  
+                               xlim = c(0, max_months),  
+                               title = "PFS - IRE",  subtitle = "GSE14210",
+                               xlab = "Time (Months)",  ylab = "Survival Probability", 
+                               break.time.by = 4,  
+                               ggtheme = theme_classic(base_size = 16), 
+                               risk.table.y.text.col = TRUE, risk.table.height = 0.25,  
+                               risk.table.y.text = TRUE, conf.int.style = "step",  
+                               surv.median.line = "hv",  
+                               pval.size = 6,  
+                               font.title = c(18, "bold"), 
+                               font.subtitle = c(14, "italic"), 
+                               font.x = c(14, "plain"),  
+                               font.y = c(14, "plain"),  
+                               font.tickslab = c(12, "plain"),  
+                               legend.title = "Group",  
+                               legend.labs = c("Group 1 - High", "Group 2 - Low"), 
+                               legend = c(0.85, 0.85),  
+                               risk.table.fontsize = 3.5)
+pfs_plot_GSE14210
 
 
 
