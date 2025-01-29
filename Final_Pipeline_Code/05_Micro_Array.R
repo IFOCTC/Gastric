@@ -1,5 +1,5 @@
 ## Load useful
-source("00_SUpport_ssGSEA.R")
+#source("00_SUpport_ssGSEA.R")
 library(GEOquery)
 library(limma)
 library(umap)
@@ -57,10 +57,10 @@ options(timeout = max(300, getOption("timeout")))
 ## Load data expression
 gset_GSE14210 <- getGEO(filename = paste0(dest_dir, "GSE14210_series_matrix.txt.gz"))
 gset_GSE15459 <- getGEO(filename = paste0(dest_dir, "GSE15459_series_matrix.txt.gz"))
-gset_GSE22377 <- getGEO(filename = paste0(dest_dir, "GSE22377_series_matrix.txt.gz"))
-gset_GSE29272 <- getGEO(filename = paste0(dest_dir, "GSE29272_series_matrix.txt.gz"))
-gset_GSE51105 <- getGEO(filename = paste0(dest_dir, "GSE51105_series_matrix.txt.gz"))
-gset_GSE62254 <- getGEO(filename = paste0(dest_dir, "GSE62254_series_matrix.txt.gz"))
+# gset_GSE22377 <- getGEO(filename = paste0(dest_dir, "GSE22377_series_matrix.txt.gz"))
+# gset_GSE29272 <- getGEO(filename = paste0(dest_dir, "GSE29272_series_matrix.txt.gz"))
+# gset_GSE51105 <- getGEO(filename = paste0(dest_dir, "GSE51105_series_matrix.txt.gz"))
+# gset_GSE62254 <- getGEO(filename = paste0(dest_dir, "GSE62254_series_matrix.txt.gz"))
 
 ## Clinical
 df_clinical_GSE14210 <- read.table("GSE14208_SurvivalData.txt", header = TRUE)
@@ -374,8 +374,8 @@ p_os_status_distribution <- ggplot(df_final, aes(x = Signature)) +
                 y = (..count..)/sum(..count..)), 
             stat = "count", vjust = -0.5, size = 5, fontface = "bold") + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(title = "OS Status Distribution - Micro-Array",
-       subtitle = "GSE14210 + GSE15459",
+  labs(title = "OS Status Distribution",
+       subtitle = "Microarray: GSE14210 + GSE15459",
        x = "Signature",
        y = "Percentage") +
   theme_classic(base_size = 14, base_family = "Arial") + 
@@ -397,7 +397,7 @@ os_plot <- ggsurvplot(fit_os, data = df_final,
                       risk.table = TRUE, pval = TRUE, conf.int = FALSE,
                       palette = c("#E74C3C", "#3498DB"),  
                       xlim = c(0, 48),  
-                      title = "OS",  subtitle = "GSE14210 + GSE15459",
+                      title = "OS",  subtitle = "Microarray: GSE14210 + GSE15459",
                       xlab = "Time (Months)",  ylab = "Survival Probability", 
                       break.time.by = 4,  
                       ggtheme = theme_classic(base_size = 16), 
@@ -416,7 +416,14 @@ os_plot <- ggsurvplot(fit_os, data = df_final,
                       risk.table.fontsize = 3.5)
 os_plot
 
+## Grid
+grid.arrange(p_os_status_distribution, os_plot$plot,
+             ncol = 2)
 
+grid.arrange(p_os_status_distribution_ire, os_plot_own$plot, p_pfs_status_distribution_ire, pfs_plot_own$plot,
+             p_os_status_distribution_tcga, os_plot_tcga$plot, p_os_status_distribution_filtered_tcga, os_plot_tcga_filtered$plot, 
+             p_os_status_distribution, os_plot$plot,
+             ncol = 4)
 
 
 
