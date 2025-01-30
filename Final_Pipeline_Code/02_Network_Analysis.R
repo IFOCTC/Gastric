@@ -58,6 +58,12 @@ ids_missing <- c("IRE-056", "IRE-104", "IRE-105",
                  "IRE-107", "IRE-136", "IRE-153",
                  "IRE-157", "IRE-202", "IRE-291")
 
+## Differences Gens
+## EHR2
+
+## CLDN18
+
+
 ## ***************************************
 ## EXPLORATORY ANALYSIS - CLINICAL FEATURES
 ## ***************************************

@@ -146,6 +146,34 @@ mat_own_tpm_transposed <- mat_own_tpm_transposed %>%
 mat_tcga_tpm_transposed <- mat_tcga_tpm_transposed %>%
   mutate(Signature = case_when(Genes >= t ~ "High",
                                Genes <  t ~ "Low"))
+
+## CLDN18 Distribution in High & Low
+df_tpm_own_filtered_tumor_transposed <- t(df_tpm_own_filtered_tumor)
+df_tpm_own_filtered_tumor_transposed <- data.frame(df_tpm_own_filtered_tumor_transposed)
+df_tpm_own_filtered_tumor_transposed$Signature <- mat_own_tpm_transposed$Signature
+ggplot(df_tpm_own_filtered_tumor_transposed,
+       aes(x = factor(Signature, levels = c("Low", "High")),
+                    y = CLDN18, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", alpha = 0.8) +  
+  labs(title = "CLDN18 Distribution",
+       x = "Signature",
+       y = "",
+       fill = "") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "",  
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.grid.major = element_line(size = 0.2, color = "gray90"),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "white", color = "white")) +
+  stat_compare_means(method = "kruskal.test")
+
+
 ## Check
 table(mat_own_tpm_transposed$Signature)
 table(mat_tcga_tpm_transposed$Signature)
@@ -198,7 +226,7 @@ p_signature_filtered_tcga <- ggplot(mat_tcga_tpm_transposed_merged_filtered,
 
 ## Signature Barplot Distribution
 ## OS Status distribution
-p_os_status_distribution <- ggplot(mat_own_tpm_transposed_merged_os, aes(x = Signature)) +
+p_os_status_distribution_ire <- ggplot(mat_own_tpm_transposed_merged_os, aes(x = Signature)) +
   geom_bar(aes(y = (..count..)/sum(..count..)),
            fill = c("#E74C3C", "#3498DB"), color = c("#E74C3C", "#3498DB"), alpha = 0.8) + 
   geom_text(aes(label = paste0(..count.., " (", round((..count..)/sum(..count..) * 100, 1), "%)"), 
@@ -220,7 +248,7 @@ p_os_status_distribution <- ggplot(mat_own_tpm_transposed_merged_os, aes(x = Sig
         panel.grid.minor = element_blank(),  
         legend.position = "none")
 ## PFS Status Distribution
-p_pfs_status_distribution <- ggplot(mat_own_tpm_transposed_merged_pfs, aes(x = Signature)) +
+p_pfs_status_distribution_ire <- ggplot(mat_own_tpm_transposed_merged_pfs, aes(x = Signature)) +
   geom_bar(aes(y = (..count..)/sum(..count..)),
            fill = c("#E74C3C", "#3498DB"), color = c("#E74C3C", "#3498DB"), alpha = 0.8) + 
   geom_text(aes(label = paste0(..count.., " (", round((..count..)/sum(..count..) * 100, 1), "%)"), 
@@ -403,7 +431,7 @@ os_plot_tcga_filtered <- ggsurvplot(fit_os_tcga_filtered, data = mat_tcga_tpm_tr
 
 ## Plot everything together
 blank <- grid::nullGrob()
-grid.arrange(p_os_status_distribution, os_plot_own$plot, p_pfs_status_distribution, pfs_plot_own$plot,
+grid.arrange(p_os_status_distribution_ire, os_plot_own$plot, p_pfs_status_distribution_ire, pfs_plot_own$plot,
              p_os_status_distribution_tcga, os_plot_tcga$plot, p_os_status_distribution_filtered_tcga, os_plot_tcga_filtered$plot, 
              ncol = 4)
 
@@ -430,45 +458,47 @@ grid.arrange(p_os_status_distribution, os_plot_own$plot, p_pfs_status_distributi
 ## ***************************************
 ## Boxplot of expression conditioning on all stages
 names(df_clinical_tcga)[names(df_clinical_tcga) == "sample"] <- "ID"
-df_clinical_tcga_plot <- df_clinical_tcga %>%  
+df_clinical_tcga_plot <- df_clinical_tcga %>%
   filter(ID %in% selected_colnames_tcga)
 df_clinical_tcga_plot$ID <- sub("-[^-]+$", "", df_clinical_tcga_plot$ID)
 ## Merge
 df_tcga_boxplot_stages <- merge(mat_tcga_tpm_transposed_merged, df_clinical_tcga_plot, by = "ID")
 ## Group by
 df_plot_stage <- df_tcga_boxplot_stages %>%
-  filter(!is.na(ajcc_pathologic_stage.diagnoses)) %>%  
+  filter(!is.na(ajcc_pathologic_stage.diagnoses)) %>%
   mutate(ajcc_pathologic_stage.diagnoses = recode(ajcc_pathologic_stage.diagnoses,
-                                                  "Stage I"    = "Stage I-II",
-                                                  "Stage IA"   = "Stage I-II",
-                                                  "Stage IB"   = "Stage I-II",
-                                                  "Stage II"   = "Stage I-II",
-                                                  "Stage IIA"  = "Stage I-II",
-                                                  "Stage IIB"  = "Stage I-II",
-                                                  "Stage III"  = "Stage III-IV",
-                                                  "Stage IIIA" = "Stage III-IV",
-                                                  "Stage IIIB" = "Stage III-IV",
-                                                  "Stage IIIC" = "Stage III-IV",
-                                                  "Stage IV"   = "Stage III-IV"))
+                                                  "Stage I"    = "Stage I",
+                                                  "Stage IA"   = "Stage I",
+                                                  "Stage IB"   = "Stage I",
+                                                  "Stage II"   = "Stage II",
+                                                  "Stage IIA"  = "Stage II",
+                                                  "Stage IIB"  = "Stage II",
+                                                  "Stage III"  = "Stage III",
+                                                  "Stage IIIA" = "Stage III",
+                                                  "Stage IIIB" = "Stage III",
+                                                  "Stage IIIC" = "Stage III",
+                                                  "Stage IV"   = "Stage IV"))
 
 ## Boxplot Stage I-II Vs. Stage III-Iv
-custom_colors <- c("Stage I-II"    = "steelblue", 
-                   "Stage III-IV"  = "red")
+custom_colors <- c("Stage I"   = "steelblue",
+                   "Stage II"  = "steelblue",
+                   "Stage III" = "red",
+                   "Stage IV"  = "red")
 ggplot(df_plot_stage, aes(x = ajcc_pathologic_stage.diagnoses, y = Genes, fill = ajcc_pathologic_stage.diagnoses)) +
-  geom_boxplot(width = 0.3, color = "black", alpha = 0.7, outlier.shape = NA) +  
-  labs(title = "Gene Expression by AJCC Pathologic Stage",  
-       x = "AJCC Pathologic Stage", y = "Gene Expression",  
+  geom_boxplot(width = 0.3, color = "black", alpha = 0.7, outlier.shape = NA) +
+  labs(title = "Gene Expression by AJCC Pathologic Stage",
+       x = "AJCC Pathologic Stage", y = "Gene Expression",
        fill = "Stage", subtitle = "TCGA Cohort Analysis") +
-  scale_fill_manual(values = custom_colors) +  
-  theme_classic(base_size = 16) + 
+  scale_fill_manual(values = custom_colors) +
+  theme_classic(base_size = 16) +
   theme(plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
-        plot.subtitle = element_text(size = 14, hjust = 0.5), 
-        axis.title = element_text(size = 16),  
-        axis.text = element_text(size = 14), 
-        legend.position = "right", 
-        legend.text = element_text(size = 12),  
-        legend.title = element_text(face = "bold", size = 14), 
-        panel.grid.major.y = element_line(color = "grey80", linetype = "dashed"),  
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        legend.position = "right",
+        legend.text = element_text(size = 12),
+        legend.title = element_text(face = "bold", size = 14),
+        panel.grid.major.y = element_line(color = "grey80", linetype = "dashed"),
         panel.grid.major.x = element_blank()) +
   stat_compare_means(method = "kruskal.test", label.y = max(df_plot_stage$Genes) * 1.1, size = 6, color = "red") +  # Position and style compare means
   geom_jitter(shape = 16, color = "black", size = 1, width = 0.15, alpha = 0.5)
@@ -478,7 +508,7 @@ ggplot(df_plot_stage, aes(x = ajcc_pathologic_stage.diagnoses, y = Genes, fill =
 df_clinical_bioportal <- read_tsv(paste0(data_path, "/stad_tcga_pan_can_atlas_2018_clinical_data.tsv"),
                                   show_col_types = FALSE)
 
-df_clinical_bioportal_filtered <- df_clinical_bioportal %>%  
+df_clinical_bioportal_filtered <- df_clinical_bioportal %>%
   filter(`Patient ID` %in% mat_tcga_tpm_transposed_merged$ID)
 names(df_clinical_bioportal_filtered)[names(df_clinical_bioportal_filtered) == "Patient ID"] <- "ID"
 df_clinical_bioportal_filtered <- merge(mat_tcga_tpm_transposed_merged, df_clinical_bioportal_filtered, by = "ID")
@@ -499,24 +529,24 @@ df_percent <- df_clinical_bioportal_filtered_plot %>%
 
 ## Barplot Molecular Subtypes with p valu and position fill
 ggplot(df_percent, aes(x = Signature, y = Percentage, fill = Subtype)) +
-  geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7, alpha = 0.85) +  
-  labs(title = "Molecular Subtype Distribution by Signature",  
-       x = "Signature", 
-       y = "Percentage", 
-       fill = "Molecular Subtype") + 
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 0.7)) +  
-  scale_fill_manual(values = c("STAD_CIN" = "steelblue", "STAD_EBV" = "firebrick", "STAD_GS" = "forestgreen", 
-                               "STAD_MSI" = "purple", "STAD_POLE" = "darkorange"),  
-                    labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +  
-  theme_classic(base_size = 16) + 
-  theme(plot.title = element_text(face = "bold", size = 18, hjust = 0.5),  
-        plot.subtitle = element_text(size = 14, hjust = 0.5),  
-        axis.title = element_text(size = 16),  
-        axis.text = element_text(size = 14),  
-        legend.position = "right", 
-        legend.text = element_text(size = 12),  
-        legend.title = element_text(face = "bold", size = 14),  
-        panel.grid.major.y = element_line(color = "grey80", linetype = "dashed"),  
+  geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.7, alpha = 0.85) +
+  labs(title = "Molecular Subtype Distribution by Signature",
+       x = "Signature",
+       y = "Percentage",
+       fill = "Molecular Subtype") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 0.7)) +
+  scale_fill_manual(values = c("STAD_CIN" = "steelblue", "STAD_EBV" = "firebrick", "STAD_GS" = "forestgreen",
+                               "STAD_MSI" = "purple", "STAD_POLE" = "darkorange"),
+                    labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +
+  theme_classic(base_size = 16) +
+  theme(plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        legend.position = "right",
+        legend.text = element_text(size = 12),
+        legend.title = element_text(face = "bold", size = 14),
+        panel.grid.major.y = element_line(color = "grey80", linetype = "dashed"),
         panel.grid.major.x = element_blank())
 
 ## Conditioning
@@ -532,32 +562,42 @@ my_comparison <- list(c("STAD_CIN", "STAD_EBV"), c("STAD_CIN", "STAD_GS"),
                       c("STAD_GS", "STAD_POLE"),  c("STAD_MSI", "STAD_POLE"))
 ## Plot
 plot_genes_signature <- ggplot(df_clinical_bioportal_filtered_plot_no_na, aes(x = Signature, y = Genes, fill = Subtype)) +
-  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7) +  
-  labs(title = "Genes Expression by Signature", 
-       x = "Signature", y = "Genes", fill = "Subtype") + 
-  scale_fill_manual(values = c("STAD_CIN" = "steelblue", "STAD_EBV" = "red", "STAD_GS" = "green", 
-                               "STAD_MSI" = "purple", "STAD_POLE" = "orange"),
-                    labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +  
-  theme_minimal() + 
-  theme(legend.position = "right", 
-        axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  
-        axis.text.y = element_text(size = 12),
-        plot.title = element_text(size = 16, face = "bold"), 
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 13)) +
-  stat_compare_means(aes(group = Subtype), label = "p.format", method = "kruskal.test", label.x = 1.5)  
-plot_genes_signature
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black",  # Adding border color to boxes for better contrast
+               alpha = 0.8) +  # Slight transparency for a cleaner look
+  labs(title = "Genes Expression by Signature",
+       x = "Signature", y = "Genes", fill = "Subtype") +
+  scale_fill_manual(values = c("STAD_CIN" = "#1f77b4",   # Steelblue (CIN)
+                               "STAD_EBV" = "#d62728",   # Red (EBV)
+                               "STAD_GS" = "#2ca02c",    # Green (GS)
+                               "STAD_MSI" = "#9467bd",   # Purple (MSI)
+                               "STAD_POLE" = "#ff7f0e"), # Orange (POLE)
+                    labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +
+  theme_minimal(base_size = 14) +  # Set base font size to 14 for better readability
+  theme(
+    legend.position = "right",  # Keep legend to the right
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  # Rotate x-axis labels
+    axis.text.y = element_text(size = 12, face = "plain"),  # Y-axis labels size
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  # Larger title, center-aligned
+    legend.text = element_text(size = 12),  # Legend text size
+    legend.title = element_text(size = 13),  # Legend title size
+    axis.title = element_text(size = 14, face = "bold"),  # Axis titles in bold for better visibility
+    panel.grid.major = element_line(size = 0.2, color = "gray90"),  # Lighter grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines for a cleaner look
+  ) +
+  stat_compare_means(aes(group = Subtype), label = "p.format", method = "kruskal.test", label.x = 1.5)  # Statistical annotations
 
+plot_genes_signature
 
 
 ## Plot without signature condition
 df_percent <- df_clean %>%
   mutate(Subtype_Signature = paste(Subtype, Signature, sep = " "))
-df_percent$Subtype_Signature <- factor(df_percent$Subtype_Signature, 
-                                       levels = c("STAD_CIN High", "STAD_CIN Low", 
-                                                  "STAD_EBV High", "STAD_EBV Low", 
-                                                  "STAD_GS High", "STAD_GS Low", 
-                                                  "STAD_MSI High", "STAD_MSI Low", 
+df_percent$Subtype_Signature <- factor(df_percent$Subtype_Signature,
+                                       levels = c("STAD_CIN High", "STAD_CIN Low",
+                                                  "STAD_EBV High", "STAD_EBV Low",
+                                                  "STAD_GS High", "STAD_GS Low",
+                                                  "STAD_MSI High", "STAD_MSI Low",
                                                   "STAD_POLE High", "STAD_POLE Low"))
 ## Plot
 my_comparisons<- list(c("STAD_CIN High", "STAD_CIN Low"),
@@ -584,16 +624,16 @@ my_comparisons<- list(c("STAD_CIN High", "STAD_CIN Low"),
                       c("STAD_MSI High", "STAD_MSI Low"),
                       c("STAD_POLE High", "STAD_POLE Low"))
 ggplot(df_percent, aes(x = Subtype_Signature, y = after_stat(count), fill = Subtype_Signature)) +
-  geom_bar() + 
-  labs(title = "Molecular Subtype By Signature", 
-       x = "Signature", y = "Count", fill = "Subtype") + 
-  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  
+  geom_bar() +
+  labs(title = "Molecular Subtype By Signature",
+       x = "Signature", y = "Count", fill = "Subtype") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
   scale_fill_manual(values = c("STAD_CIN High" = "steelblue", "STAD_CIN Low" = "steelblue",
                                "STAD_EBV High" = "red", "STAD_EBV Low" = "red",
-                               "STAD_GS High" = "green", "STAD_GS Low" = "green", 
+                               "STAD_GS High" = "green", "STAD_GS Low" = "green",
                                "STAD_MSI High" = "purple", "STAD_MSI Low" = "purple",
-                               "STAD_POLE High" = "orange", "STAD_POLE Low" = "orange")) +  
-  theme_minimal() +  
+                               "STAD_POLE High" = "orange", "STAD_POLE Low" = "orange")) +
+  theme_minimal() +
   theme(legend.position = "right") +
   stat_compare_means(comparisons = my_comparisons, bracket.size = .6, size = 4) +
   stat_compare_means(label.y = 4.5, method = "kruskal.test") + theme(legend.position = "none")

@@ -130,17 +130,17 @@ print(expression_summary_t4)
 ## SAVE OUTPUT
 ## ***************************************
 
-## Extract and save only up-regulated
-up_resistant_08 <- result_08$degs_data %>% filter(Expression == "Down-regulated")
-up_resistant_08_genes <- rownames(up_resistant_08)
-up_resistant_1  <- result_1$degs_data  %>% filter(Expression == "Down-regulated")
-up_resistant_1_genes <- rownames(up_resistant_1)
-up_resistant_15 <- result_15$degs_data %>% filter(Expression == "Down-regulated")
-up_resistant_15_genes <- rownames(up_resistant_15)
-up_resistant_2  <- result_2$degs_data  %>% filter(Expression == "Down-regulated")
-up_resistant_2_genes <- rownames(up_resistant_2)
-## Save in 4 txt files
-writeLines(up_resistant_08_genes, paste0(output_path, "/up_resistant_08_genes.txt"))
-writeLines(up_resistant_1_genes, paste0(output_path, "/up_resistant_1_genes.txt"))
-writeLines(up_resistant_15_genes, paste0(output_path, "/up_resistant_15_genes.txt"))
-writeLines(up_resistant_2_genes, paste0(output_path, "/up_resistant_2_genes.txt"))
+# ## Extract and save only up-regulated
+# up_resistant_08 <- result_08$degs_data %>% filter(Expression == "Down-regulated")
+# up_resistant_08_genes <- rownames(up_resistant_08)
+# up_resistant_1  <- result_1$degs_data  %>% filter(Expression == "Down-regulated")
+# up_resistant_1_genes <- rownames(up_resistant_1)
+# up_resistant_15 <- result_15$degs_data %>% filter(Expression == "Down-regulated")
+# up_resistant_15_genes <- rownames(up_resistant_15)
+# up_resistant_2  <- result_2$degs_data  %>% filter(Expression == "Down-regulated")
+# up_resistant_2_genes <- rownames(up_resistant_2)
+# ## Save in 4 txt files
+# writeLines(up_resistant_08_genes, paste0(output_path, "/up_resistant_08_genes.txt"))
+# writeLines(up_resistant_1_genes, paste0(output_path, "/up_resistant_1_genes.txt"))
+# writeLines(up_resistant_15_genes, paste0(output_path, "/up_resistant_15_genes.txt"))
+# writeLines(up_resistant_2_genes, paste0(output_path, "/up_resistant_2_genes.txt"))

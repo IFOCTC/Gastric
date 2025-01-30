@@ -111,9 +111,9 @@ volcano_plot <- function(res, log2FoldChange_t = c(-0.8, 0.8), padj_t = 0.05, to
                                       col = Expression, label = rownames(volcano_dat))) +
     geom_point() + 
     theme_minimal() +
-    scale_color_manual(values = c("Down-regulated" = "green",
+    scale_color_manual(values = c("Down-regulated" = "red",
                                   "Unchanged" = "grey",
-                                  "Up-regulated" = "red")) +
+                                  "Up-regulated" = "green")) +
     geom_vline(xintercept = c(log2FoldChange_t[1], log2FoldChange_t[2]), col = "black") +
     geom_hline(yintercept = -log10(padj_t), col = "black") +
     ggtitle("Volcano Plot") +
@@ -180,47 +180,47 @@ compute_hubs <- function(adj_matrix, mart = mart_names){
 
 
 ## 07 - Define a function that plot the network with the hubs
-# Enhanced plot_graph function without unused NULL argument
+## Enhanced plot_graph function without unused NULL argument
 plot_graph <- function(net, hubs, title, subtitle = NULL) {
-  # Input: Network, Hubs, Title, Subtitle
-  # Output: Network Plot
+  ## Input: Network, Hubs, Title, Subtitle
+  ## Output: Network Plot
   
-  # Assign node types and colors
+  ## Assign node types and colors
   net %v% "type"  <- ifelse(network.vertex.names(net) %in% names(hubs), "hub", "non-hub")
-  net %v% "color" <- ifelse(net %v% "type" == "hub", "#FF6F61", "#6FA1FF")  # Red for hubs, blue for non-hubs
+  net %v% "color" <- ifelse(net %v% "type" == "hub", "#FF6F61", "#6FA1FF")  ## Red for hubs, blue for non-hubs
   
-  # Get vertex coordinates with more spacing using Fruchterman-Reingold layout
-  coord <- gplot.layout.fruchtermanreingold(net, layout.par = list(niter = 1000, area = 5000))  # 'area' parameter increases spacing
+  ## Get vertex coordinates with more spacing using Fruchterman-Reingold layout
+  coord <- gplot.layout.fruchtermanreingold(net, layout.par = list(niter = 1000, area = 5000))  ## 'area' parameter increases spacing
   net %v% "x" <- coord[, 1]
   net %v% "y" <- coord[, 2]
   
-  # Define the label vector - labels only for hubs
-  labels <- ifelse(net %v% "type" == "hub", network.vertex.names(net), "")  # Show label only for hubs
+  ## Define the label vector - labels only for hubs
+  labels <- ifelse(net %v% "type" == "hub", network.vertex.names(net), "")  ## Show label only for hubs
   
-  # Plot network with custom settings
+  ## Plot network with custom settings
   ggnet2(net,
-         color = "color",        # Use color scheme defined earlier
-         alpha = 0.8,            # Slight transparency for better visibility
-         size = 4,               # Increase node size
+         color = "color",        ## Use color scheme defined earlier
+         alpha = 0.8,            ## Slight transparency for better visibility
+         size = 4,               ## Increase node size
          mode = c("x", "y"),
-         edge.alpha = 0.7,       # Adjust transparency for edges
-         edge.size = 0.3,        # Thicker edges for better distinction
-         label = labels,         # Plot labels only for hubs
-         label.color = "black",  # Set label color to black
-         label.size = 4,         # Increase label size for hubs
-         label.trim = TRUE       # Avoid trimming labels to ensure full display
+         edge.alpha = 0.7,       ## Adjust transparency for edges
+         edge.size = 0.3,        ## Thicker edges for better distinction
+         #label = labels,         ## Plot labels only for hubs
+         label.color = "black",  ## Set label color to black
+         label.size = 4,         ## Increase label size for hubs
+         label.trim = TRUE       ## Avoid trimming labels to ensure full display
   ) +
     ggtitle(title, subtitle = subtitle) +
     theme(
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  # Centered title
-      plot.subtitle = element_text(hjust = 0.5, size = 12, face = "italic"),  # Subtitle in italic
-      panel.background = element_blank(),    # Clean background without gridlines
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),  ## Centered title
+      plot.subtitle = element_text(hjust = 0.5, size = 12, face = "italic"),  ## Subtitle in italic
+      panel.background = element_blank(),    ## Clean background without gridlines
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       axis.ticks = element_blank(),
       axis.text = element_blank()
     ) +
-    guides(size = "none", label = "none")  # Remove legends for size and label
+    guides(size = "none", label = "none")  ## Remove legends for size and label
 }
 
 ## 08 - Define a function to automate volcano plot generation and output summary

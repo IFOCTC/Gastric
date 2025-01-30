@@ -35,6 +35,7 @@ names(df_prospettici)[names(df_prospettici) == "Performance_Status_ECOG"] <- "PS
 names(df_prospettici)[names(df_prospettici) == "Metastatico_LocAvanzato_operabile"] <- "MLA"
 names(df_prospettici)[names(df_prospettici) == "Intervento_Chirurgico_si_no"] <- "SURGERY"
 names(df_prospettici)[names(df_prospettici) == "N_Metastasi"] <- "METASTASIS_NUMBER"
+names(df_prospettici)[names(df_prospettici) == "Sesso"] <- "SEX"
 ## Convert datetime variables and create age
 df_prospettici$Data_diagnosi <- as.Date(df_prospettici$Data_diagnosi, format = "%d/%m/%Y")
 df_prospettici$Data_nascita  <- as.Date(df_prospettici$Data_nascita, format = "%d/%m/%Y")
@@ -73,6 +74,7 @@ names(df_retrospettivi)[names(df_retrospettivi) == "Nome_e_Cognome"] <- "NOME_CO
 names(df_retrospettivi)[names(df_retrospettivi) == "Performance_Status_ECOG"] <- "PS"
 names(df_retrospettivi)[names(df_retrospettivi) == "Int_Chir"] <- "SURGERY"
 names(df_retrospettivi)[names(df_retrospettivi) == "I_linea_CT"] <- "MLA"
+names(df_retrospettivi)[names(df_retrospettivi) == "Sesso"] <- "SEX"
 ## Convert datetime variables and create age
 df_retrospettivi$`Data diagn`       <- as.Date(df_retrospettivi$Data_diagn, format = "%Y-%m-%d")
 df_retrospettivi$`Data di nascita`  <- as.Date(df_retrospettivi$Data_di_nascita, format = "%Y-%m-%d")
@@ -89,7 +91,7 @@ df_retrospettivi$SURGERY <- ifelse(df_retrospettivi$SURGERY == 1, "SI", "NO")
 ## MLA
 df_retrospettivi$MLA <- ifelse(df_retrospettivi$MLA == 2, "LOCALLY ADVANCED ", "METASTATIC")
 ## Select columns
-columns_clinical  <- c("ID", "NOME_COGNOME", "AGE",
+columns_clinical  <- c("ID", "NOME_COGNOME", "AGE", "SEX",
                        "PS", "MLA", "METASTASIS_NUMBER", "SURGERY")
 
 columns_signature <- c("ID", "Genes", "Signature", "OS_time", "OS_Event",
@@ -122,7 +124,7 @@ df_final_pfs <- df_signature_pfs_filtered %>%
 ## ## ***************************************
 ## MULTIVARIATE ANALYSIS
 ## ***************************************
-covariate_names <- c(AGE = "AGE", PS = "PS", MLA = "MLA",
+covariate_names <- c(AGE = "AGE", PS = "PS", MLA = "MLA", SEX = "SEX",
                      METASTASIS_NUMBER = "METASTASIS_NUMBER", SURGERY = "SURGERY")
 ## Reveal
 ## OS
@@ -130,22 +132,24 @@ df_final_os$PS  <- relevel(factor(df_final_os$PS), ref = "0")
 df_final_os$MLA <- relevel(factor(df_final_os$MLA), ref = "LOCALLY ADVANCED")
 df_final_os$METASTASIS_NUMBER <- relevel(factor(df_final_os$METASTASIS_NUMBER), ref = "1 SITE")
 df_final_os$SURGERY <- relevel(factor(df_final_os$SURGERY), ref = "NO")
-df_final_os$Signature <- relevel(factor(df_final_os$Signature), ref = "Low")
+df_final_os$SIGNATURE <- relevel(factor(df_final_os$Signature), ref = "Low")
 df_final_os$AGE <- relevel(factor(df_final_os$AGE), ref = "Low")
+df_final_os$SEX <- relevel(factor(df_final_os$SEX), ref = "M")
 ## PFS
 df_final_pfs$PS  <- relevel(factor(df_final_pfs$PS), ref = "0")
 df_final_pfs$MLA <- relevel(factor(df_final_pfs$MLA), ref = "LOCALLY ADVANCED")
 df_final_pfs$METASTASIS_NUMBER <- relevel(factor(df_final_pfs$METASTASIS_NUMBER), ref = "1 SITE")
 df_final_pfs$SURGERY <- relevel(factor(df_final_pfs$SURGERY), ref = "NO")
-df_final_pfs$Signature <- relevel(factor(df_final_pfs$Signature), ref = "Low")
+df_final_pfs$SIGNATURE <- relevel(factor(df_final_pfs$Signature), ref = "Low")
 df_final_pfs$AGE <- relevel(factor(df_final_pfs$AGE), ref = "Low")
+df_final_pfs$SEX <- relevel(factor(df_final_pfs$SEX), ref = "M")
 
 ## Regression
 ## OS
-reg_os  <- coxph(Surv(OS_time) ~ AGE + PS + METASTASIS_NUMBER + MLA + Signature,
+reg_os  <- coxph(Surv(OS_time) ~ AGE + PS + SEX + METASTASIS_NUMBER + MLA + SIGNATURE,
                  data = df_final_os)
 ## PFS
-reg_pfs  <- coxph(Surv(PFS_time) ~ AGE + PS + METASTASIS_NUMBER + MLA + Signature,
+reg_pfs  <- coxph(Surv(PFS_time) ~ AGE + PS + SEX + METASTASIS_NUMBER + MLA + SIGNATURE,
                   data = df_final_pfs)
 
 ## Forest Plot
