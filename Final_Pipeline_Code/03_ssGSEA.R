@@ -146,17 +146,49 @@ mat_own_tpm_transposed <- mat_own_tpm_transposed %>%
 mat_tcga_tpm_transposed <- mat_tcga_tpm_transposed %>%
   mutate(Signature = case_when(Genes >= t ~ "High",
                                Genes <  t ~ "Low"))
+## Export
+write.csv(mat_own_tpm_transposed, paste(data_path, "OWN_Signature.csv"),
+          row.names = TRUE)
+write.csv(mat_tcga_tpm_transposed, paste(data_path, "TCGA_Signature.csv"),
+          row.names = TRUE)
 
 ## CLDN18 Distribution in High & Low
 df_tpm_own_filtered_tumor_transposed <- t(df_tpm_own_filtered_tumor)
 df_tpm_own_filtered_tumor_transposed <- data.frame(df_tpm_own_filtered_tumor_transposed)
 df_tpm_own_filtered_tumor_transposed$Signature <- mat_own_tpm_transposed$Signature
+## OWN
 ggplot(df_tpm_own_filtered_tumor_transposed,
        aes(x = factor(Signature, levels = c("Low", "High")),
                     y = CLDN18, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  labs(title = "CLDN18 Distribution",
+  labs(title = "CLDN18 Distribution - IRE",
+       x = "Signature",
+       y = "",
+       fill = "") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "",  
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.grid.major = element_line(size = 0.2, color = "gray90"),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "white", color = "white")) +
+  stat_compare_means(method = "kruskal.test")
+## TCGA
+df_tpm_tcga_cleaned_tumor_transposed <- t(df_tpm_tcga_cleaned_tumor)
+df_tpm_tcga_cleaned_tumor_transposed <- data.frame(df_tpm_tcga_cleaned_tumor_transposed)
+df_tpm_tcga_cleaned_tumor_transposed$Signature <- mat_tcga_tpm_transposed$Signature
+## Plot
+ggplot(df_tpm_tcga_cleaned_tumor_transposed,
+       aes(x = factor(Signature, levels = c("Low", "High")),
+           y = CLDN18, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", alpha = 0.8) +  
+  labs(title = "CLDN18 Distribution - TCGA",
        x = "Signature",
        y = "",
        fill = "") +
@@ -173,6 +205,51 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
         plot.background = element_rect(fill = "white", color = "white")) +
   stat_compare_means(method = "kruskal.test")
 
+## ERBB2 Distribution in High & Low
+## OWN
+ggplot(df_tpm_own_filtered_tumor_transposed,
+       aes(x = factor(Signature, levels = c("Low", "High")),
+           y = ERBB2, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", alpha = 0.8) +  
+  labs(title = "ERBB2 Distribution - IRE",
+       x = "Signature",
+       y = "",
+       fill = "") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "",  
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.grid.major = element_line(size = 0.2, color = "gray90"),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "white", color = "white")) +
+  stat_compare_means(method = "kruskal.test")
+## TCGA
+ggplot(df_tpm_tcga_cleaned_tumor_transposed,
+       aes(x = factor(Signature, levels = c("Low", "High")),
+           y = ERBB2, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", alpha = 0.8) +  
+  labs(title = "ERBB2 Distribution - TCGA",
+       x = "Signature",
+       y = "",
+       fill = "") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "",  
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.grid.major = element_line(size = 0.2, color = "gray90"),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "white", color = "white")) +
+  stat_compare_means(method = "kruskal.test")
 
 ## Check
 table(mat_own_tpm_transposed$Signature)
