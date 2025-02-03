@@ -225,30 +225,30 @@ sample_acts_final_long <- tidyr::pivot_longer(sample_acts_final, cols = colnames
 
 ## Plot
 pro_unique <- unique(sample_acts_final_long$Variable)
-for (pro in pro_unique){
-  df_subset <- subset(sample_acts_final_long, Variable == pro)
-  p <- ggplot(df_subset,
-              aes(x = factor(Class, levels = c("IRE", "TCGA")),
-                  y = Value, fill = factor(Signature, levels = c("Low", "High")))) +
-    geom_boxplot(outlier.size = 1, outlier.colour = "black",
-                 width = 0.7, colour = "black", alpha = 0.8) +
-    labs(title = paste0(pro),
-         x = "Signature",
-         y = "Value Expression",
-         fill = "") +
-    scale_fill_manual(values = c("Low" = "#1f77b4", "High" = "#d62728")) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "",
-          axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
-          axis.text.y = element_text(size = 12, face = "plain"),
-          plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-          axis.title = element_text(size = 14, face = "bold"),
-          panel.grid.major = element_line(size = 0.2, color = "gray90"),
-          panel.grid.minor = element_blank(),
-          plot.background = element_rect(fill = "white", color = "white")) +
-    stat_compare_means(method = "kruskal.test", label = "p.signif", label.x = 1.5, size = 5)
-  ggsave(paste0("C:/Users/david/Documents/IFO/Final_Pipeline_Code/Output_Images/Progeny/",
-                pro, "_boxplot.png"), plot = p, width = 8, height = 6)}
+# for (pro in pro_unique){
+#   df_subset <- subset(sample_acts_final_long, Variable == pro)
+#   p <- ggplot(df_subset,
+#               aes(x = factor(Class, levels = c("IRE", "TCGA")),
+#                   y = Value, fill = factor(Signature, levels = c("Low", "High")))) +
+#     geom_boxplot(outlier.size = 1, outlier.colour = "black",
+#                  width = 0.7, colour = "black", alpha = 0.8) +
+#     labs(title = paste0(pro),
+#          x = "Signature",
+#          y = "Value Expression",
+#          fill = "") +
+#     scale_fill_manual(values = c("Low" = "#1f77b4", "High" = "#d62728")) +
+#     theme_minimal(base_size = 14) +
+#     theme(legend.position = "",
+#           axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
+#           axis.text.y = element_text(size = 12, face = "plain"),
+#           plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+#           axis.title = element_text(size = 14, face = "bold"),
+#           panel.grid.major = element_line(size = 0.2, color = "gray90"),
+#           panel.grid.minor = element_blank(),
+#           plot.background = element_rect(fill = "white", color = "white")) +
+#     stat_compare_means(method = "kruskal.test", label = "p.signif", label.x = 1.5, size = 5)
+#   ggsave(paste0("C:/Users/david/Documents/IFO/Final_Pipeline_Code/Output_Images/Progeny/",
+#                 pro, "_boxplot.png"), plot = p, width = 8, height = 6)}
 
 
 

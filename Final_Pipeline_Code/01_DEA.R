@@ -96,7 +96,7 @@ res_ordered_05 <- res_05[order(res_05$pvalue),]
 
 ## Different thresholds
 t_values <- c(0.8, 1, 1.5, 2)
-result_08 <- generate_volcano(t = t_values[1], res = res_1, padj_t = 0.05, top_n = 50)
+result_08 <- generate_volcano(t = t_values[1], res = res_1, padj_t = 0.05, top_n = 100)
 result_1  <- generate_volcano(t = t_values[2], res = res_1, padj_t = 0.05, top_n = 50)
 result_15 <- generate_volcano(t = t_values[3], res = res_1, padj_t = 0.05, top_n = 50)
 result_2  <- generate_volcano(t = t_values[4], res = res_1, padj_t = 0.05, top_n = 50)
