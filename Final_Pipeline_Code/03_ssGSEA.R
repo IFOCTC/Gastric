@@ -73,6 +73,11 @@ df_tpm_tcga_cleaned_tumor <- df_tpm_tcga_final %>%
 ## Remove the last part of barcode
 selected_colnames_cleaned_tcga <- sub("-[^-]+$", "", colnames(df_tpm_tcga_cleaned_tumor))
 colnames(df_tpm_tcga_cleaned_tumor) <- selected_colnames_cleaned_tcga
+## Filter Stage III-IV
+df_survival_tcga_filtered$sample <-  sub("-[^-]+$", "", df_survival_tcga_filtered$sample)
+common_columns <- intersect(colnames(df_tpm_tcga_cleaned_tumor), df_survival_tcga_filtered$sample)
+df_tpm_tcga_cleaned_tumor_filtered <- df_tpm_tcga_cleaned_tumor %>% 
+  dplyr::select(all_of(common_columns))
 
 ## OWN TPM
 ## Consider only tumor patients
@@ -82,6 +87,7 @@ df_tpm_own_filtered_tumor <- df_tpm_own %>%
 ## Setting row names
 rownames(df_tpm_tcga_cleaned_tumor) <- make.names(genes_names_tcga, unique = TRUE) 
 rownames(df_tpm_own_filtered_tumor) <- make.names(genes_names_tpm, unique = TRUE) 
+rownames(df_tpm_tcga_cleaned_tumor_filtered) <- make.names(genes_names_tcga, unique = TRUE)
 
 ## Define the list of genes to use
 genes <- c("GNAI2", "RSU1", "NRP1", "GNS", "IFITM3",
@@ -146,11 +152,15 @@ mat_own_tpm_transposed <- mat_own_tpm_transposed %>%
 mat_tcga_tpm_transposed <- mat_tcga_tpm_transposed %>%
   mutate(Signature = case_when(Genes >= t ~ "High",
                                Genes <  t ~ "Low"))
+
 # ## Export
 # write.csv(mat_own_tpm_transposed, paste(data_path, "OWN_Signature.csv"),
 #           row.names = TRUE)
 # write.csv(mat_tcga_tpm_transposed, paste(data_path, "TCGA_Signature.csv"),
 #           row.names = TRUE)
+
+## Boxplot molecular subtypes by signature
+
 
 ## CLDN18 Distribution in High & Low
 df_tpm_own_filtered_tumor_transposed <- t(df_tpm_own_filtered_tumor)
@@ -162,35 +172,65 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
                     y = CLDN18, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  labs(title = "CLDN18 Distribution - IRE",
+  ylim(0, max(df_tpm_own_filtered_tumor_transposed$CLDN18)) +
+  labs(title = "CLDN18", subtitle = "IRE Cohort Analysis",
        x = "Signature",
-       y = "",
+       y = "Gene Expression",
        fill = "") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
-                               "High" = "#d62728")) + 
+                               "High" = "#d62728")) +
   theme_minimal(base_size = 14) +
   theme(legend.position = "",  
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
         axis.text.y = element_text(size = 12, face = "plain"), 
-        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
         axis.title = element_text(size = 14, face = "bold"), 
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "kruskal.test", label.x = 0.6)
 ## TCGA
 df_tpm_tcga_cleaned_tumor_transposed <- t(df_tpm_tcga_cleaned_tumor)
 df_tpm_tcga_cleaned_tumor_transposed <- data.frame(df_tpm_tcga_cleaned_tumor_transposed)
 df_tpm_tcga_cleaned_tumor_transposed$Signature <- mat_tcga_tpm_transposed$Signature
+
 ## Plot
-ggplot(df_tpm_tcga_cleaned_tumor_transposed,
+ggplot(df_tpm_tcga_cleaned_tumor_transposed_filtered,
        aes(x = factor(Signature, levels = c("Low", "High")),
            y = CLDN18, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  labs(title = "CLDN18 Distribution - TCGA",
+  ylim(0, max(df_tpm_tcga_cleaned_tumor_transposed_filtered$CLDN18)) +
+  labs(title = "CLDN18", subtitle = "TCGA Cohort Analysis",
        x = "Signature",
-       y = "",
+       y = "Gene Expression",
+       fill = "") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "",  
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.grid.major = element_line(size = 0.2, color = "gray90"),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "white", color = "white")) +
+  stat_compare_means(method = "kruskal.test", label.x = 0.6)
+
+## TACSTD2 Distribution in High & Low
+## OWN
+ggplot(df_tpm_own_filtered_tumor_transposed,
+       aes(x = factor(Signature, levels = c("Low", "High")),
+           y = TACSTD2, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", alpha = 0.8) +  
+  ylim(0, max(df_tpm_own_filtered_tumor_transposed$TACSTD2)) +
+  labs(title = "TACSTD2", subtitle = "IRE Cohort Analysis",
+       x = "Signature",
+       y = "Gene Expression",
        fill = "") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
                                "High" = "#d62728")) + 
@@ -199,11 +239,36 @@ ggplot(df_tpm_tcga_cleaned_tumor_transposed,
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        plot.subtitle = element_text(hjust = 0.5),
         axis.title = element_text(size = 14, face = "bold"), 
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "kruskal.test", label.x = 0.6)
+## TCGA
+ggplot(df_tpm_tcga_cleaned_tumor_transposed,
+       aes(x = factor(Signature, levels = c("Low", "High")),
+           y = TACSTD2, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", alpha = 0.8) +  
+  ylim(0, max(df_tpm_tcga_cleaned_tumor_transposed$TACSTD2)) +
+  labs(title = "TACSTD2", subtitle = "TCGA Cohort Analysis", 
+       x = "Signature",
+       y = "Gene Expression",
+       fill = "") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) + 
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "",  
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title = element_text(size = 14, face = "bold"), 
+        panel.grid.major = element_line(size = 0.2, color = "gray90"),
+        panel.grid.minor = element_blank(),
+        plot.background = element_rect(fill = "white", color = "white")) +
+  stat_compare_means(method = "kruskal.test", label.x = 0.6)
 
 ## ERBB2 Distribution in High & Low
 ## OWN
@@ -212,9 +277,10 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
            y = ERBB2, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  labs(title = "ERBB2 Distribution - IRE",
+  ylim(0, max(df_tpm_own_filtered_tumor_transposed$ERBB2)) +
+  labs(title = "ERBB2", subtitle = "IRE Cohort Analysis",
        x = "Signature",
-       y = "",
+       y = "Gene Expression",
        fill = "") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
                                "High" = "#d62728")) + 
@@ -223,20 +289,23 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        plot.subtitle = element_text(hjust = 0.5),
         axis.title = element_text(size = 14, face = "bold"), 
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "kruskal.test", label.x = 0.6)
+
 ## TCGA
 ggplot(df_tpm_tcga_cleaned_tumor_transposed,
        aes(x = factor(Signature, levels = c("Low", "High")),
            y = ERBB2, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  labs(title = "ERBB2 Distribution - TCGA",
+  ylim(0, max(df_tpm_tcga_cleaned_tumor_transposed$ERBB2)) +
+  labs(title = "ERBB2", subtitle = "TCGA Cohort Analysis", 
        x = "Signature",
-       y = "",
+       y = "Gene Expression",
        fill = "") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
                                "High" = "#d62728")) + 
@@ -245,11 +314,12 @@ ggplot(df_tpm_tcga_cleaned_tumor_transposed,
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        plot.subtitle = element_text(hjust = 0.5),
         axis.title = element_text(size = 14, face = "bold"), 
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "kruskal.test", label.x = 0.6)
 
 ## HIF1A Distribution in High & Low
 ## OWN
@@ -258,9 +328,10 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
            y = HIF1A, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  labs(title = "HIF1A Distribution - IRE",
+  ylim(0, max(df_tpm_own_filtered_tumor_transposed$HIF1A)) +
+  labs(title = "HIF1A", subtitle = "IRE Cohort Analysis",
        x = "Signature",
-       y = "",
+       y = "Gene Expression",
        fill = "") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
                                "High" = "#d62728")) + 
@@ -269,20 +340,22 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
+        plot.subtitle = element_text(hjust = 0.5),
         axis.title = element_text(size = 14, face = "bold"), 
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "kruskal.test", label.x = 0.6, label.y = 10.1)
 ## TCGA
 ggplot(df_tpm_tcga_cleaned_tumor_transposed,
        aes(x = factor(Signature, levels = c("Low", "High")),
            y = HIF1A, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
-               colour = "black", alpha = 0.8) +  
-  labs(title = "HIF1A Distribution - TCGA",
+               colour = "black", alpha = 0.8) + 
+  ylim(0, max(df_tpm_tcga_cleaned_tumor_transposed$HIF1A)) +
+  labs(title = "HIF1A", subtitle = "TCGA Cohort Analysis",
        x = "Signature",
-       y = "",
+       y = "Gene Expression",
        fill = "") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
                                "High" = "#d62728")) + 
@@ -292,10 +365,11 @@ ggplot(df_tpm_tcga_cleaned_tumor_transposed,
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  
         axis.title = element_text(size = 14, face = "bold"), 
+        plot.subtitle = element_text(hjust = 0.5),
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "kruskal.test", label.x = 0.6, label.y = 9.1)
 
 ## Check
 table(mat_own_tpm_transposed$Signature)
@@ -620,6 +694,7 @@ df_clinical_bioportal_filtered <- df_clinical_bioportal %>%
   filter(`Patient ID` %in% mat_tcga_tpm_transposed_merged$ID)
 names(df_clinical_bioportal_filtered)[names(df_clinical_bioportal_filtered) == "Patient ID"] <- "ID"
 df_clinical_bioportal_filtered <- merge(mat_tcga_tpm_transposed_merged, df_clinical_bioportal_filtered, by = "ID")
+names(df_clinical_bioportal_filtered)[names(df_clinical_bioportal_filtered) == "Neoplasm Disease Stage American Joint Committee on Cancer Code"] <- "Stage"
 
 ## Check
 table(df_clinical_bioportal_filtered$Subtype)
@@ -641,7 +716,7 @@ ggplot(df_percent, aes(x = Signature, y = Percentage, fill = Subtype)) +
   labs(title = "Molecular Subtype Distribution by Signature",
        x = "Signature",
        y = "Percentage",
-       fill = "Molecular Subtype") +
+       fill = "Molecular Subtype", subtitle = "TCGA Cohort Analysis") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 0.7)) +
   scale_fill_manual(values = c("STAD_CIN" = "steelblue", "STAD_EBV" = "firebrick", "STAD_GS" = "forestgreen",
                                "STAD_MSI" = "purple", "STAD_POLE" = "darkorange"),
@@ -660,7 +735,7 @@ ggplot(df_percent, aes(x = Signature, y = Percentage, fill = Subtype)) +
 ## Conditioning
 ## Remove NA values for relevant columns
 df_clinical_bioportal_filtered_plot_no_na <- df_clinical_bioportal_filtered_plot %>%
-  filter(!is.na(Signature), !is.na(Subtype), !is.na(Genes))
+  filter(!is.na(Signature), !is.na(Subtype), !is.na(Genes), !is.na(Stage))
 
 ## Define pairwise comparisons
 ## Plot
@@ -669,7 +744,7 @@ ggplot(df_clinical_bioportal_filtered_plot_no_na, aes(x = Signature, y = Genes, 
                colour = "black", 
                alpha = 0.8) +  
   labs(title = "Genes Expression by Signature",
-       x = "Signature", y = "Genes", fill = "Subtype") +
+       x = "Signature", y = "Genes Expression", fill = "Subtype", subtitle = "TCGA Cohort Analysis") +
   scale_fill_manual(values = c("STAD_CIN" = "#1f77b4",  
                                "STAD_EBV" = "#d62728",   
                                "STAD_GS" = "#2ca02c",   
@@ -681,14 +756,80 @@ ggplot(df_clinical_bioportal_filtered_plot_no_na, aes(x = Signature, y = Genes, 
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
         legend.text = element_text(size = 12),  
         legend.title = element_text(size = 13),  
         axis.title = element_text(size = 14, face = "bold"),  
         panel.grid.major = element_line(size = 0.2, color = "gray90"), 
         panel.grid.minor = element_blank()) +
-  stat_compare_means(method = "kruskal.test", label.y = 2.2)
+  stat_compare_means(comparison = list(c("High", "Low")),
+                     method = "wilcox.test", label.y = 2.5) +
+  stat_compare_means(label = "p.signif")
+## Molecular Subtype by Signature
+ggplot(df_clinical_bioportal_filtered_plot_no_na, aes(x = Subtype, y = Genes, fill = Signature)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", 
+               alpha = 0.8) +  
+  labs(title = "Genes Expression by Molecular Subtype",
+       x = "Subtype", y = "Genes Expression", fill = "Signature", subtitle = "TCGA Cohort Analysis") +
+  scale_fill_manual(values = c("Low" = "#1f77b4",  
+                               "High" = "#d62728")) +
+  scale_x_discrete(labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +
+  theme_minimal(base_size = 14) + 
+  theme(legend.position = "right", 
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
+        legend.text = element_text(size = 12),  
+        legend.title = element_text(size = 13),  
+        axis.title = element_text(size = 14, face = "bold"),  
+        panel.grid.major = element_line(size = 0.2, color = "gray90"), 
+        panel.grid.minor = element_blank()) +
+  stat_compare_means(label = "p.signif", method = "kruskal.test")
+## Conditioning for stage
+## Group by for stage
+df_clinical_bioportal_filtered_plot_no_na_stage <- df_clinical_bioportal_filtered_plot_no_na %>%
+  mutate(Stage = recode(Stage,
+                        "STAGE I"    = "STAGE I-II",
+                        "STAGE IA"   = "STAGE I-II",
+                        "STAGE IB"   = "STAGE I-II",
+                        "STAGE II"   = "STAGE I-II",
+                        "STAGE IIA"  = "STAGE I-II",
+                        "STAGE IIB"  = "STAGE I-II",
+                        "STAGE III"  = "STAGE III-IV",
+                        "STAGE IIIA" = "STAGE III-IV",
+                        "STAGE IIIB" = "STAGE III-IV",
+                        "STAGE IIIC" = "STAGE III-IV",
+                        "STAGE IV"   = "STAGE III-IV"))
+## Plot
+ggplot(df_clinical_bioportal_filtered_plot_no_na_stage, aes(x = Stage, y = Genes, fill = Subtype)) +
+  geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
+               colour = "black", 
+               alpha = 0.8) +  
+  labs(title = "Genes Expression by Stage",
+       x = "Stage", y = "Genes Expression", fill = "Subtype", subtitle = "TCGA Cohort Analysis") +
+  scale_fill_manual(values = c("STAD_CIN" = "#1f77b4",  
+                               "STAD_EBV" = "#d62728",   
+                               "STAD_GS" = "#2ca02c",   
+                               "STAD_MSI" = "#9467bd",   
+                               "STAD_POLE" = "#ff7f0e"),
+                    labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +
+  theme_minimal(base_size = 14) + 
+  theme(legend.position = "right", 
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
+        axis.text.y = element_text(size = 12, face = "plain"), 
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
+        legend.text = element_text(size = 12),  
+        legend.title = element_text(size = 13),  
+        axis.title = element_text(size = 14, face = "bold"),  
+        panel.grid.major = element_line(size = 0.2, color = "gray90"), 
+        panel.grid.minor = element_blank()) +
+  stat_compare_means(comparison = list(c("STAGE I-II", "STAGE III-IV")),
+                     label = "p.format", method = "wilcox.test") 
 
-## Now filter for only High Signature and replot
+
 ## Filter
 df_clinical_bioportal_filtered_plot_no_na_high <- df_clinical_bioportal_filtered_plot_no_na %>% 
   filter(Signature == "High")
@@ -698,7 +839,8 @@ ggplot(df_clinical_bioportal_filtered_plot_no_na_high, aes(x = Subtype, y = Gene
                colour = "black", 
                alpha = 0.8) +  
   labs(title = "Genes Expression by High Signature",
-       x = "Molecular Subtype", y = "Genes", fill = "Subtype") +
+       x = "Molecular Subtype", y = "Genes Expression", fill = "Subtype",
+       subtitle = "TCGA Cohort Analysis") +
   scale_fill_manual(values = c("STAD_CIN" = "#1f77b4",  
                                "STAD_EBV" = "#d62728",   
                                "STAD_GS" = "#2ca02c",   
@@ -711,6 +853,7 @@ ggplot(df_clinical_bioportal_filtered_plot_no_na_high, aes(x = Subtype, y = Gene
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
         legend.text = element_text(size = 12),  
         legend.title = element_text(size = 13),  
         axis.title = element_text(size = 14, face = "bold"),  
@@ -728,7 +871,7 @@ ggplot(df_cin_gs, aes(x = Signature, y = Genes, fill = Subtype)) +
                colour = "black", 
                alpha = 0.8) +  
   labs(title = "Genes Expression by Molecular Subtype",
-       x = "Signature", y = "Genes", fill = "Subtype") +
+       x = "Signature", y = "Genes Expression", fill = "Subtype", subtitle = "TCGA Cohort Analysis") +
   scale_fill_manual(values = c("STAD_CIN" = "#1f77b4",  
                                "STAD_GS" = "#2ca02c"),
                     labels = c("CIN", "GS")) +
@@ -737,6 +880,7 @@ ggplot(df_cin_gs, aes(x = Signature, y = Genes, fill = Subtype)) +
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
         legend.text = element_text(size = 12),  
         legend.title = element_text(size = 13),  
         axis.title = element_text(size = 14, face = "bold"),  
@@ -749,7 +893,8 @@ ggplot(df_cin_gs, aes(x = Subtype, y = Genes, fill = Signature)) +
                colour = "black", 
                alpha = 0.8) +  
   labs(title = "Genes Expression by Molecular Subtype",
-       x = "Molecular Subtype", y = "Genes", fill = "Signature") +
+       x = "Molecular Subtype", y = "Genes Expression", fill = "Signature",
+       subtitle = "TCGA Cohort Analysis") +
   scale_fill_manual(values = c("Low" = "#1f77b4",  
                                "High" = "red")) +
   scale_x_discrete(labels = c("CIN", "GS")) +
@@ -758,63 +903,11 @@ ggplot(df_cin_gs, aes(x = Subtype, y = Genes, fill = Signature)) +
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(size = 14, hjust = 0.5),
         legend.text = element_text(size = 12),  
         legend.title = element_text(size = 13),  
         axis.title = element_text(size = 14, face = "bold"),  
         panel.grid.major = element_line(size = 0.2, color = "gray90"), 
         panel.grid.minor = element_blank()) +
   stat_compare_means(label.y = 2.2)
-
-
-## Plot without signature condition
-df_percent <- df_clean %>%
-  mutate(Subtype_Signature = paste(Subtype, Signature, sep = " "))
-df_percent$Subtype_Signature <- factor(df_percent$Subtype_Signature,
-                                       levels = c("STAD_CIN High", "STAD_CIN Low",
-                                                  "STAD_EBV High", "STAD_EBV Low",
-                                                  "STAD_GS High", "STAD_GS Low",
-                                                  "STAD_MSI High", "STAD_MSI Low",
-                                                  "STAD_POLE High", "STAD_POLE Low"))
-## Plot
-my_comparisons<- list(c("STAD_CIN High", "STAD_CIN Low"),
-                      c("STAD_EBV High", "STAD_EBV Low"),
-                      c("STAD_GS High", "STAD_GS Low"),
-                      c("STAD_MSI High", "STAD_MSI Low"),
-                      c("STAD_POLE High", "STAD_POLE Low"))
-ggplot(df_percent, aes(x = Subtype_Signature, y = Genes, fill = Subtype)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Molecular Subtype By Signature",
-       x = "Signature", y = "Expression", fill = "Subtype") +
-  scale_fill_manual(values = c("STAD_CIN" = "steelblue", "STAD_EBV" = "red", "STAD_GS" = "green",
-                               "STAD_MSI" = "purple", "STAD_POLE" = "orange"),
-                    labels = c("CIN", "EBV", "GS", "MSI", "POLE")) +
-  theme_minimal() +
-  theme(legend.position = "right") +
-  stat_compare_means(comparisons = my_comparisons, bracket.size = .6, size = 4) +
-  stat_compare_means(label.y = 4.5, method = "kruskal.test") + theme(legend.position = "none")
-
-## Barplot
-my_comparisons<- list(c("STAD_CIN High", "STAD_CIN Low"),
-                      c("STAD_EBV High", "STAD_EBV Low"),
-                      c("STAD_GS High", "STAD_GS Low"),
-                      c("STAD_MSI High", "STAD_MSI Low"),
-                      c("STAD_POLE High", "STAD_POLE Low"))
-ggplot(df_percent, aes(x = Subtype_Signature, y = after_stat(count), fill = Subtype_Signature)) +
-  geom_bar() +
-  labs(title = "Molecular Subtype By Signature",
-       x = "Signature", y = "Count", fill = "Subtype") +
-  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-  scale_fill_manual(values = c("STAD_CIN High" = "steelblue", "STAD_CIN Low" = "steelblue",
-                               "STAD_EBV High" = "red", "STAD_EBV Low" = "red",
-                               "STAD_GS High" = "green", "STAD_GS Low" = "green",
-                               "STAD_MSI High" = "purple", "STAD_MSI Low" = "purple",
-                               "STAD_POLE High" = "orange", "STAD_POLE Low" = "orange")) +
-  theme_minimal() +
-  theme(legend.position = "right") +
-  stat_compare_means(comparisons = my_comparisons, bracket.size = .6, size = 4) +
-  stat_compare_means(label.y = 4.5, method = "kruskal.test") + theme(legend.position = "none")
-
-
-stat_compare_means(df_percent, comparisons = my_comparisons, bracket.size = .6, size = 4)
-
 
