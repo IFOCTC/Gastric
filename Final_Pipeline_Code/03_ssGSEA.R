@@ -161,7 +161,7 @@ mat_tcga_tpm_transposed <- mat_tcga_tpm_transposed %>%
 
 ## Boxplot molecular subtypes by signature
 
-
+## SCD
 ## CLDN18 Distribution in High & Low
 df_tpm_own_filtered_tumor_transposed <- t(df_tpm_own_filtered_tumor)
 df_tpm_own_filtered_tumor_transposed <- data.frame(df_tpm_own_filtered_tumor_transposed)
@@ -169,11 +169,11 @@ df_tpm_own_filtered_tumor_transposed$Signature <- mat_own_tpm_transposed$Signatu
 ## OWN
 ggplot(df_tpm_own_filtered_tumor_transposed,
        aes(x = factor(Signature, levels = c("Low", "High")),
-                    y = CLDN18, fill = Signature)) +
+                    y = SCD, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
   ylim(0, max(df_tpm_own_filtered_tumor_transposed$CLDN18)) +
-  labs(title = "CLDN18", subtitle = "IRE Cohort Analysis",
+  labs(title = "SCD", subtitle = "IRE Cohort Analysis",
        x = "Signature",
        y = "Gene Expression",
        fill = "") +
@@ -189,7 +189,7 @@ ggplot(df_tpm_own_filtered_tumor_transposed,
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test", label.x = 0.6)
+  stat_compare_means(method = "wilcox.test", label.x = 0.6)
 ## TCGA
 df_tpm_tcga_cleaned_tumor_transposed <- t(df_tpm_tcga_cleaned_tumor)
 df_tpm_tcga_cleaned_tumor_transposed <- data.frame(df_tpm_tcga_cleaned_tumor_transposed)
@@ -200,11 +200,11 @@ df_tpm_tcga_cleaned_tumor_transposed <- df_tpm_tcga_cleaned_tumor_transposed %>%
 ## Plot
 ggplot(df_tpm_tcga_cleaned_tumor_transposed,
        aes(x = factor(Signature, levels = c("Low", "High")),
-           y = CLDN18, fill = Signature)) +
+           y = SCD, fill = Signature)) +
   geom_boxplot(outlier.size = 1, outlier.colour = "black", width = 0.7, 
                colour = "black", alpha = 0.8) +  
-  ylim(0, max(df_tpm_tcga_cleaned_tumor_transposed$CLDN18)) +
-  labs(title = "CLDN18", subtitle = "TCGA Cohort Analysis",
+  ylim(0, max(df_tpm_tcga_cleaned_tumor_transposed$SCD)) +
+  labs(title = "SCD", subtitle = "TCGA Cohort Analysis",
        x = "Signature",
        y = "Gene Expression",
        fill = "") +
@@ -220,7 +220,7 @@ ggplot(df_tpm_tcga_cleaned_tumor_transposed,
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
         plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means(method = "kruskal.test")
+  stat_compare_means(method = "wilcox.test")
 
 ## TACSTD2 Distribution in High & Low
 ## OWN

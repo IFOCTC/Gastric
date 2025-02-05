@@ -105,9 +105,10 @@ rownames(df_tpm_own_filtered_tumor) <- make.names(genes_names_tpm, unique = TRUE
 ## SIGNATURES
 ## OWN
 ## Load Immuno
-immuno_own          <- read.csv(paste0(data_path_own, "/signature_gmt.csv"))
+signature_gmt <- readr::read_delim("signature_gmt.csv", 
+                                   delim = ";", escape_double = FALSE, trim_ws = TRUE)
 expression_data     <- as.matrix(df_tpm_own_filtered_tumor)
-ssgsea_params       <- ssgseaParam(expression_data, immuno_own)
+ssgsea_params       <- ssgseaParam(expression_data, signature_gmt)
 ssGSEA_scores       <- gsva(ssgsea_params)
 ssGSEA_scores       <- as.data.frame(t(ssGSEA_scores))
 ssGSEA_scores_scale <- scale(ssGSEA_scores)
@@ -117,15 +118,14 @@ ssGSEA_scores_scale$ID <- rownames(ssGSEA_scores_scale)
 ## Merge
 ssGSEA_scores_scale_final <- merge(ssGSEA_scores_scale, df_signature_own, by = "ID")
 rownames(ssGSEA_scores_scale_final) <- ssGSEA_scores_scale_final$ID
-ssGSEA_scores_scale_final$ID <- NULL
 ssGSEA_scores_scale_final$Genes <- NULL 
-ssGSEA_scores_scale_final$Class <- rep("IRE", nrow(ssGSEA_scores_scale_final))
 
 ## TCGA
 ## Load Immuno
-immuno_tcga              <- read.csv(paste0(data_path_own, "/signature_gmt.csv"))
+signature_gmt <- readr::read_delim("signature_gmt.csv", 
+                                   delim = ";", escape_double = FALSE, trim_ws = TRUE)
 expression_data_tcga     <- as.matrix(df_tpm_tcga_cleaned_tumor)
-ssgsea_params_tcga       <- ssgseaParam(expression_data_tcga, hallmark_pathways)
+ssgsea_params_tcga       <- ssgseaParam(expression_data_tcga, signature_gmt)
 ssGSEA_scores_tcga       <- gsva(ssgsea_params_tcga)
 ssGSEA_scores_tcga       <- as.data.frame(t(ssGSEA_scores_tcga))
 ssGSEA_scores_scale_tcga <- scale(ssGSEA_scores_tcga)
@@ -136,13 +136,115 @@ ssGSEA_scores_scale_tcga$ID <- rownames(ssGSEA_scores_scale_tcga)
 ## Merge
 ssGSEA_scores_scale_final_tcga <- merge(ssGSEA_scores_scale_tcga, df_signature_tcga, by = "ID")
 rownames(ssGSEA_scores_scale_final_tcga) <- ssGSEA_scores_scale_final_tcga$ID
-ssGSEA_scores_scale_final_tcga$ID <- NULL
 ssGSEA_scores_scale_final_tcga$Genes <- NULL 
-ssGSEA_scores_scale_final_tcga$Class <- rep("TCGA", nrow(ssGSEA_scores_scale_final_tcga))
 
 ## Merge
-df_final_hallmark <- rbind(ssGSEA_scores_scale_final, ssGSEA_scores_scale_final_tcga)
+df_final_immuno <- rbind(ssGSEA_scores_scale_final, ssGSEA_scores_scale_final_tcga)
 
 ## Reshape
-df_final_hallmark_long <- tidyr::pivot_longer(df_final_hallmark, cols = starts_with("HALLMARK"), 
+df_final_immuno_long <- tidyr::pivot_longer(df_final_immuno, cols = colnames(df_final_immuno)[1:29], 
                                               names_to = "Variable", values_to = "Value")
+
+## Boxplot
+immuno_unique <- unique(df_final_immuno_long$Variable)
+# for (immuno in immuno_unique){
+#   df_subset <- subset(df_final_immuno_long, Variable == immuno)
+#   p <- ggplot(df_subset,
+#               aes(x = factor(Class, levels = c("IRE", "TCGA")),
+#                   y = Value, fill = factor(Signature, levels = c("Low", "High")))) +
+#     geom_boxplot(outlier.size = 1, outlier.colour = "black",
+#                  width = 0.7, colour = "black", alpha = 0.8) +
+#     labs(title = paste0(immuno),
+#          x = "",
+#          y = "Value Expression",
+#          fill = "Signature") +
+#     scale_fill_manual(values = c("Low" = "#1f77b4", "High" = "#d62728")) +
+#     theme_minimal(base_size = 14) +
+#     theme(legend.position = "right",
+#           axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),
+#           axis.text.y = element_text(size = 12, face = "plain"),
+#           plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+#           axis.title = element_text(size = 14, face = "bold"),
+#           panel.grid.major = element_line(size = 0.2, color = "gray90"),
+#           panel.grid.minor = element_blank(),
+#           plot.background = element_rect(fill = "white", color = "white")) +
+#     stat_compare_means(method = "kruskal.test", label = "p.signif", label.x = 1.5, size = 5)
+#   ggsave(paste0("C:/Users/david/Documents/IFO/Final_Pipeline_Code/Output_Images/Immuno_Signatures/",
+#                 immuno, "_boxplot.png"), plot = p, width = 8, height = 6)}
+
+## Plot - IRE
+color_scale <- colorRampPalette(c("blue", "white", "red"))(100)
+my_sample_col <- ssGSEA_scores_scale_final %>% 
+  dplyr::select("Signature")
+ssGSEA_scores_scale_final_plot <- ssGSEA_scores_scale_final %>% 
+  dplyr::select(-c("ID", "Signature"))
+ordered_columns <- order(my_sample_col$Signature, decreasing = FALSE)
+ordered_matrix  <- ssGSEA_scores_scale_final_plot[ordered_columns, ]
+ordered_annotation_col <- my_sample_col[ordered_columns, , drop = FALSE]
+annotation_colors <- list(Signature = c("Low" = "#1f77b4", "High" = "#d62728"))
+pheatmap(as.matrix(t(ordered_matrix)),
+         annotation_col = ordered_annotation_col,
+         annotation_colors = annotation_colors,
+         label_row = NA,
+         show_colnames = FALSE,
+         cluster_cols = FALSE,
+         cluster_row = TRUE,
+         main = "Immuno Signatures - IRE Cohort",
+         color = color_scale)
+## Plot - TCGA
+my_sample_col_tcga <- ssGSEA_scores_scale_final_tcga %>% 
+  dplyr::select("Signature")
+ssGSEA_scores_scale_final_tcga_plot <- ssGSEA_scores_scale_final_tcga %>% 
+  dplyr::select(-c("ID", "Signature"))
+ordered_columns_tcga <- order(my_sample_col_tcga$Signature, decreasing = FALSE)
+ordered_matrix_tcga  <- ssGSEA_scores_scale_final_tcga_plot[ordered_columns_tcga, ]
+ordered_matrix_tcga$Class <- NULL
+ordered_annotation_col_tcga <- my_sample_col_tcga[ordered_columns_tcga, , drop = FALSE]
+pheatmap(as.matrix(t(ordered_matrix_tcga)),
+         annotation_col = ordered_annotation_col_tcga,
+         annotation_colors = annotation_colors,
+         label_row = NA,
+         show_colnames = FALSE,
+         cluster_cols = FALSE,
+         cluster_row = TRUE,
+         main = "Immuno Signatures - TCGA Cohort",
+         color = color_scale)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
