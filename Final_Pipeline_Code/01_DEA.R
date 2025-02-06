@@ -71,19 +71,20 @@ df_condition_plot$ID <- rownames(df_condition_plot)
 df_final_plot <- merge(df_condition_plot, df_line_gastric_plot,
                        by = "ID")
 ## GENE
-ggplot(df_final_plot,
-       aes(x = Condition,
-           y = log2(as.numeric(SCD)+1), fill = Condition)) +
-  geom_boxplot() +  
-  labs(title = "SCD", subtitle = "IRE Cohort Analysis",
-       x = "Condition",
+ggplot(df_final_plot, aes(x = ID, y = log2(as.numeric(CLDN18) + 1))) +
+  geom_segment(aes(x = ID, xend = ID,
+                   y = 0, yend = log2(as.numeric(CLDN18) + 1)),
+               color = "grey", size = 1.5) +  
+  geom_point(aes(color = Condition), size = 4) +  
+  labs(title = "CLDN18", subtitle = "IRE Cohort Analysis",
+       x = "Cellular Line",
        y = "Gene Expression",
        fill = "") +
-  scale_fill_manual(values = c("SENSITIVE" = "#1f77b4",  
-                               "RESISTANT" = "#d62728")) +
-  ylim(0, max(log2(as.numeric(df_final_plot$SCD)+1))) +
+  scale_color_manual(values = c("SENSITIVE" = "#1f77b4",  
+                                "RESISTANT" = "#d62728")) +
+  ylim(0, max(log2(as.numeric(df_final_plot$CLDN18) + 1))) +
   theme_minimal(base_size = 14) +
-  theme(legend.position = "",  
+  theme(legend.position = "right",  
         axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "plain"),  
         axis.text.y = element_text(size = 12, face = "plain"), 
         plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
@@ -91,8 +92,9 @@ ggplot(df_final_plot,
         axis.title = element_text(size = 14, face = "bold"), 
         panel.grid.major = element_line(size = 0.2, color = "gray90"),
         panel.grid.minor = element_blank(),
-        plot.background = element_rect(fill = "white", color = "white")) +
-  stat_compare_means()
+        plot.background = element_rect(fill = "white", color = "white"))
+
+
 
 ## Filtering
 row_num_t   <- 5
