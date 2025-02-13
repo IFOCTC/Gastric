@@ -36,10 +36,10 @@ genes_set <- as.list(genes_set)
 ## Load data
 df_01 <- read_excel(paste0(data_path_own,
                            "/41591_2015_BFnm3850_MOESM34_ESM.xls"))
-df_02 <- read_excel(paste0(data_path_own,
-                           "/41591_2015_BFnm3850_MOESM37_ESM.xlsx"))
-df_03 <- read_excel(paste0(data_path_own,
-                           "/41591_2015_BFnm3850_MOESM38_ESM.xlsx"))
+# df_02 <- read_excel(paste0(data_path_own,
+#                            "/41591_2015_BFnm3850_MOESM37_ESM.xlsx"))
+# df_03 <- read_excel(paste0(data_path_own,
+#                            "/41591_2015_BFnm3850_MOESM38_ESM.xlsx"))
 # ## Check
 # dim(df_01);View(df_01) ## Clinical
 # dim(df_02);View(df_02)
@@ -47,18 +47,30 @@ df_03 <- read_excel(paste0(data_path_own,
 
 ## Load microarray
 ## Set data path
-dest_dir = "C:/Users/david/Documents/IFO/Final_Pipeline_Code/"
-gset_GSE62254 <- getGEO("GSE62254", destdir = dest_dir)
-gset_GSE62254 <- getGEO(filename = paste0(dest_dir, "GSE62254_series_matrix.txt.gz"))
+# dest_dir = "C:/Users/david/Documents/IFO/Final_Pipeline_Code/"
+# gset_GSE62254 <- getGEO("GSE62254", destdir = dest_dir)
+# gset_GSE62254 <- getGEO(filename = paste0(dest_dir, "GSE62254_series_matrix.txt.gz"))
 
 ## Extract expression
-df_expression_GSE62254 <- exprs(gset_GSE62254)
-df_expression_GSE62254 <- data.frame(df_expression_GSE62254)
+# df_expression_GSE62254 <- exprs(gset_GSE62254)
+# df_expression_GSE62254 <- data.frame(df_expression_GSE62254)
 ## Save matrix expression
 # write.csv(df_expression_GSE62254, paste(data_path_own, "df_expression_GSE62254.csv"),
-#           row.names = TRUE)
+#           row.names = FALSE)
+## Load Data
+df_expression_GSE62254 <- read.csv(paste(data_path_own, "df_expression_GSE62254.csv"),
+                                   header = TRUE)
+rownames(df_expression_GSE62254) <- df_expression_GSE62254$X
+df_expression_GSE62254$X <- NULL
+df_expression_GSE62254 <- data.frame(df_expression_GSE62254)
+
 ## Extract metadata
-df_metadata_GSE62254   <- pData(gset_GSE62254)
+# df_metadata_GSE62254   <- pData(gset_GSE62254)
+# write.csv(df_metadata_GSE62254, paste(data_path_own, "df_metadata_GSE62254.csv"),
+#           row.names = FALSE)
+df_metadata_GSE62254 <- read.csv(paste(data_path_own, "df_metadata_GSE62254.csv"),
+                                   header = TRUE)
+df_metadata_GSE62254 <- data.frame(df_metadata_GSE62254)
 ## Select only useful columns
 df_metadata_GSE62254 <- df_metadata_GSE62254 %>% 
   dplyr::select(c("title", "geo_accession"))
@@ -145,6 +157,7 @@ os_plot_GSE62254_Stage_III_IV <- ggsurvplot(fit_os_GSE62254_Stage_III_IV, data =
                                palette = c("#E74C3C", "#3498DB"),   
                                title = "OS",  subtitle = "GSE62254 - Stage III/IV",
                                xlab = "Time (Months)",  ylab = "Survival Probability", 
+                               xlim = c(0, 48),
                                break.time.by = 4,  
                                ggtheme = theme_classic(base_size = 16), 
                                risk.table.y.text.col = TRUE, risk.table.height = 0.25,  
@@ -162,13 +175,43 @@ os_plot_GSE62254_Stage_III_IV <- ggsurvplot(fit_os_GSE62254_Stage_III_IV, data =
                                risk.table.fontsize = 3.5)
 os_plot_GSE62254_Stage_III_IV
 
+## OS Stage IV
+## Fit model
+res_own_transposed_merged_GSE62254_stage_IV <- res_own_transposed_merged_GSE62254 %>% 
+  dplyr::filter(pStage %in% c("IV"))
+fit_os_GSE62254_Stage_IV <- survfit(Surv(OS_Months, as.integer(OS_Status)) ~ Signature,
+                                        data = res_own_transposed_merged_GSE62254_stage_IV)
+## Plot
+os_plot_GSE62254_Stage_IV <- ggsurvplot(fit_os_GSE62254_Stage_IV, data = res_own_transposed_merged_GSE62254_stage_IV,
+                                            risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                                            palette = c("#E74C3C", "#3498DB"),   
+                                            title = "OS",  subtitle = "GSE62254 - Stage IV",
+                                            xlab = "Time (Months)",  ylab = "Survival Probability", 
+                                            xlim = c(0, 48),
+                                            break.time.by = 4,  
+                                            ggtheme = theme_classic(base_size = 16), 
+                                            risk.table.y.text.col = TRUE, risk.table.height = 0.25,  
+                                            risk.table.y.text = TRUE, conf.int.style = "step",  
+                                            surv.median.line = "hv",  
+                                            pval.size = 6,  
+                                            font.title = c(18, "bold"), 
+                                            font.subtitle = c(14, "italic"), 
+                                            font.x = c(14, "plain"),  
+                                            font.y = c(14, "plain"),  
+                                            font.tickslab = c(12, "plain"),  
+                                            legend.title = "Group",  
+                                            legend.labs = c("Group 1 - High", "Group 2 - Low"), 
+                                            legend = c(0.85, 0.85),  
+                                            risk.table.fontsize = 3.5)
+os_plot_GSE62254_Stage_IV
+
 ## Boxplot for stage
 res_own_transposed_merged_GSE62254_filtered <- res_own_transposed_merged_GSE62254 %>% 
   dplyr::filter(pStage %in% c("I", "II", "III", "IV"))
-custom_colors <- c("I"  = "#3498DB",
-                   "II" = "#3498DB",
+custom_colors <- c("I"   = "#3498DB",
+                   "II"  = "#3498DB",
                    "III" = "#E74C3C",
-                   "IV" = "#E74C3C")
+                   "IV"  = "#E74C3C")
 ggplot(res_own_transposed_merged_GSE62254_filtered, aes(x = pStage, y = Genes, fill = pStage)) +
   geom_boxplot(width = 0.3, color = "black", alpha = 0.7, outlier.shape = NA) +
   labs(title = "Gene Expression by AJCC Pathologic Stage",

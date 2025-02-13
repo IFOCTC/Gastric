@@ -111,20 +111,20 @@ volcano_plot <- function(res, log2FoldChange_t = c(-0.8, 0.8), padj_t = 0.05, to
                                       col = Expression, label = rownames(volcano_dat))) +
     geom_point() + 
     theme_minimal() +
-    scale_color_manual(values = c("Down-regulated" = "red",
+    scale_color_manual(values = c("Down-regulated" = "#00AFBB",
                                   "Unchanged" = "grey",
-                                  "Up-regulated" = "green")) +
+                                  "Up-regulated" = "#bb0c00")) +
     geom_vline(xintercept = c(log2FoldChange_t[1], log2FoldChange_t[2]), col = "black") +
     geom_hline(yintercept = -log10(padj_t), col = "black") +
-    ggtitle("Volcano Plot") +
+    ggtitle("Resistant Vs. Sensitive") +
     ## Add the subtitle with dynamic values
     ## Total, inserire il numero di geni iniziale
     ## input genes for DEG: 15880
-    labs(subtitle = glue("Total Number of Genes: {55773}
-                          Input Genes for DEGs: {nrow(res_1)}
-                          Up-regulated: {num_upregulated}
-                          Down-regulated: {num_downregulated}
-                          Unchanged: {num_unchanged}")) +
+    # labs(subtitle = glue("Total Number of Genes: {55773}
+    #                       Input Genes for DEGs: {nrow(res_1)}
+    #                       Up-regulated: {num_upregulated}
+    #                       Down-regulated: {num_downregulated}
+    #                       Unchanged: {num_unchanged}")) +
     ## Add gene labels for the top genes
     geom_text_repel(data = top_genes, aes(label = rownames(top_genes)),
                     size = 3, max.overlaps = 10)

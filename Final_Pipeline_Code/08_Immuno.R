@@ -26,8 +26,8 @@ df_signature_own <- df_signature_own %>%
 df_signature_tcga <- df_signature_tcga %>% 
   rename(ID = ...1)
 ## Load survival data tcga
-df_survival_tcga <- read_tsv(paste0(output_path, "/survival_cleaned.tsv"), show_col_types = FALSE)
-df_clinical_tcga <- read_tsv(paste0(data_path, "/TCGA-STAD.clinical.tsv"), show_col_types = FALSE)
+df_survival_tcga        <- read_tsv(paste0(output_path, "/survival_cleaned.tsv"), show_col_types = FALSE)
+df_clinical_tcga        <- read_tsv(paste0(data_path, "/TCGA-STAD.clinical.tsv"), show_col_types = FALSE)
 ## Load survival data own
 df_survival_own <- read_excel(paste0(data_path_own, "/stomaci_wes_all.xlsx"))
 
@@ -190,7 +190,9 @@ pheatmap(as.matrix(t(ordered_matrix)),
          cluster_cols = FALSE,
          cluster_row = TRUE,
          main = "Immuno Signatures - IRE Cohort",
-         color = color_scale)
+         color = color_scale,
+         cutree_cols = 2)
+
 ## Plot - TCGA
 my_sample_col_tcga <- ssGSEA_scores_scale_final_tcga %>% 
   dplyr::select("Signature")
@@ -211,6 +213,7 @@ pheatmap(as.matrix(t(ordered_matrix_tcga)),
          color = color_scale)
 
 
+## Pecentage of mutated genes
 
 
 

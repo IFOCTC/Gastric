@@ -111,11 +111,11 @@ ggplot(df_clinical_filtered, aes(x = OS_Status)) +
 ## WRANGLING TPM
 ## ***************************************
 df_tpm$gene_id <- NULL
-genes_down_regulated <- df_degs %>% 
-  filter(Expression == "Down-regulated")
+genes_up_regulated <- df_degs %>% 
+  filter(Expression == "Up-regulated")
 ## Filtering on genes considering DEGs Up downregulated and tumor patients
 df_tpm_filtered <- df_tpm %>% 
-  filter(df_tpm$gene_name %in% genes_down_regulated$X) %>% 
+  filter(df_tpm$gene_name %in% genes_up_regulated$X) %>% 
   dplyr::select(gene_name, matches("T$"))
 ## TPM Filtering
 row_num_t   <- 30
@@ -184,20 +184,24 @@ hubs <- compute_hubs(adj_matrix, quant = 0.5)
 ## Degree distribution in order to check if the network is scale free
 df1 <- data.frame(cbind(hubs$degree))
 colnames(df1) <- "Degree"
-(hist_plot <- ggplot(df1, aes(x = Degree)) +
-  geom_histogram(fill = "steelblue", color = "black", alpha = 0.7, bins = 20) +  # Added border for bars
-  ggtitle("Degree Distribution") +
-  xlab("Degree") +
-  ylab("Frequency") +
-  theme_minimal(base_size = 14) +  # Base font size for readability
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),  ## Center title and increase size
-    axis.title.x = element_text(face = "bold", size = 14),             ## Bold x-axis title
-    axis.title.y = element_text(face = "bold", size = 14),             ## Bold y-axis title
-    axis.text = element_text(size = 12),                               ## Increase size of axis text
-    panel.grid.major = element_line(color = "gray", size = 0.5),       ## Adjust grid color/size
-    panel.grid.minor = element_blank()                                 ## Remove minor grid lines for a cleaner look
-  ))
+(hist_plot <- gghistogram(df1, x = "Degree",
+                          add = "mean", rug = TRUE,
+                          color = "black",
+                          fill = "steelblue",
+                          title = "Network Degree Distribution",
+                          xlab = "Degree", ylab = "Frequency"))
+# (hist_plot <- ggplot(df1, aes(x = Degree)) +
+#   geom_histogram(fill = "steelblue", color = "black", alpha = 0.7, bins = 20) +  
+#   ggtitle("Degree Distribution") +
+#   xlab("Degree") +
+#   ylab("Frequency") +
+#   theme_minimal(base_size = 14) +  
+#   theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 16),  
+#         axis.title.x = element_text(face = "bold", size = 14),             
+#         axis.title.y = element_text(face = "bold", size = 14),             
+#         axis.text = element_text(size = 12),                               
+#         panel.grid.major = element_line(color = "gray", size = 0.5),       
+#         panel.grid.minor = element_blank()))
 ## Compute Network
 net <- network(adj_matrix, matrix.type = "adjacency",
                ignore.eval = FALSE, names.eval = "weights",

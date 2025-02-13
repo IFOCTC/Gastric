@@ -109,7 +109,7 @@ dds <- DESeqDataSetFromMatrix(countData = round(df_rna_counts_filtered),
                               colData = df_condition,
                               design = ~ Condition)
 ## Set reference condition
-dds$Condition <- relevel(dds$Condition, ref = "RESISTANT")
+dds$Condition <- relevel(dds$Condition, ref = "SENSITIVE")
 ## DEA
 dds <- DESeq(dds)
 ## Alpha 0.1
@@ -129,12 +129,13 @@ res_ordered_1  <- res_1[order(res_1$pvalue),]
 res_ordered_05 <- res_05[order(res_05$pvalue),]
 
 ## Different thresholds
-t_values <- c(0.8, 1, 1.5, 2)
+t_values  <- c(0.8, 1, 1.5, 2)
 result_08 <- generate_volcano(t = t_values[1], res = res_1, padj_t = 0.05, top_n = 100)
 result_1  <- generate_volcano(t = t_values[2], res = res_1, padj_t = 0.05, top_n = 50)
 result_15 <- generate_volcano(t = t_values[3], res = res_1, padj_t = 0.05, top_n = 50)
 result_2  <- generate_volcano(t = t_values[4], res = res_1, padj_t = 0.05, top_n = 50)
 ## Access the plot, volcano data, DEGs data, and expression summary for a specific threshold
+
 ## 0.8
 volcano_plot_t1 <- result_08$plot
 volcano_data_t1 <- result_08$volcano_data
@@ -164,17 +165,22 @@ print(expression_summary_t4)
 ## SAVE OUTPUT
 ## ***************************************
 
-# ## Extract and save only up-regulated
-# up_resistant_08 <- result_08$degs_data %>% filter(Expression == "Down-regulated")
-# up_resistant_08_genes <- rownames(up_resistant_08)
-# up_resistant_1  <- result_1$degs_data  %>% filter(Expression == "Down-regulated")
-# up_resistant_1_genes <- rownames(up_resistant_1)
-# up_resistant_15 <- result_15$degs_data %>% filter(Expression == "Down-regulated")
-# up_resistant_15_genes <- rownames(up_resistant_15)
-# up_resistant_2  <- result_2$degs_data  %>% filter(Expression == "Down-regulated")
-# up_resistant_2_genes <- rownames(up_resistant_2)
-# ## Save in 4 txt files
-# writeLines(up_resistant_08_genes, paste0(output_path, "/up_resistant_08_genes.txt"))
-# writeLines(up_resistant_1_genes, paste0(output_path, "/up_resistant_1_genes.txt"))
-# writeLines(up_resistant_15_genes, paste0(output_path, "/up_resistant_15_genes.txt"))
-# writeLines(up_resistant_2_genes, paste0(output_path, "/up_resistant_2_genes.txt"))
+## Extract and save only up-regulated
+up_resistant_08 <- result_08$degs_data %>% filter(Expression == "Up-regulated")
+up_resistant_08_genes <- rownames(up_resistant_08)
+up_resistant_1  <- result_1$degs_data  %>% filter(Expression == "Up-regulated")
+up_resistant_1_genes <- rownames(up_resistant_1)
+up_resistant_15 <- result_15$degs_data %>% filter(Expression == "Up-regulated")
+up_resistant_15_genes <- rownames(up_resistant_15)
+up_resistant_2  <- result_2$degs_data  %>% filter(Expression == "Up-regulated")
+up_resistant_2_genes <- rownames(up_resistant_2)
+## Save in 4 txt files
+writeLines(up_resistant_08_genes, paste0(output_path, "/up_resistant_08_genes.txt"))
+writeLines(up_resistant_1_genes, paste0(output_path, "/up_resistant_1_genes.txt"))
+writeLines(up_resistant_15_genes, paste0(output_path, "/up_resistant_15_genes.txt"))
+writeLines(up_resistant_2_genes, paste0(output_path, "/up_resistant_2_genes.txt"))
+## Save 4 different csv files
+write.csv(result_08$volcano_data, paste0(output_path, "/df_volcano_degs_08.csv"))
+write.csv(result_1$volcano_data, paste0(output_path, "/df_volcano_degs_1.csv"))
+write.csv(result_15$volcano_data, paste0(output_path, "/df_volcano_degs_15.csv"))
+write.csv(result_2$volcano_data, paste0(output_path, "/df_volcano_degs_2.csv"))
