@@ -1,0 +1,554 @@
+## Load Useful
+rm(list = ls())
+library(readr)
+library(readxl)
+library(DESeq2)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(affy)
+library(scales)
+library(pheatmap)
+library(lsa)
+library(vsn)
+library(EnhancedVolcano)
+library(glue)
+library(biomaRt)
+library(psych)
+library(reshape2)
+library(stringr)
+library(network)
+library(igraph)
+library(sna)
+library(GGally)
+library(gplots)
+library(gridExtra)
+library(shiny)
+library(survival)
+library(survminer)
+options(scipen = 999)
+
+## Set data path directory
+data_path       <- "C:/Users/david/Documents/IFO/Gastric_TCGA/Data"
+data_path_own   <- "C:/Users/david/Documents/IFO/Gastric/Data"
+output_path     <- "C:/Users/david/Documents/IFO/Gastric_TCGA/Output_Data"
+output_path_own <- "C:/Users/david/Documents/IFO/Gastric/Output_Res"
+
+## 00 - Define a function for data wrangling
+process_df <- function(df, col_to_set_as_rownames) {
+  ## Convert to a standard data frame if not already
+  df <- as.data.frame(df)
+  ## Extract the column to use as rownames
+  rownames_column <- df[[col_to_set_as_rownames]]
+  ## Set the rownames
+  rownames(df) <- rownames_column
+  ## Remove the specified column
+  df[[col_to_set_as_rownames]] <- NULL
+  return(df)
+}
+
+
+## 01 - Define a function to process and optionally view data frames with unique titles
+inspect <- function(df, name, show_view = TRUE) {
+  ## Display dimensions of the data frame
+  print(paste("Dimensions of", name, ":"))
+  print(dim(df))
+  ## Optionally view the data frame with a unique title
+  if (show_view) {
+    View(df, title = paste("View of", name))
+  }
+}
+
+
+## 02 - Define a function to convert character columns to integers
+convert_to_numeric <- function(df) {
+  df[] <- lapply(df, function(col) {
+    if (is.character(col)) {
+      ## Convert character to numeric
+      as.numeric(col)
+    } else {
+      ## Leave other types unchanged
+      col  
+    }
+  })
+  return(df)
+}
+
+
+## 03 - ## Define a function to draw a scatter plot for a pair of variables (samples)
+plotFun <- function(x, y){ 
+  dns <- densCols(x, y); 
+  points(x,y, col = dns, pch = ".", panel.first = grid());}
+
+
+## 04 - Define a function to make a volcano plot
+volcano_plot <- function(res, log2FoldChange_t = c(-0.8, 0.8), padj_t = 0.05, top_n = 10) {
+  ## Convert to dataframe 
+  volcano_dat <- as.data.frame(res)
+  ## Ensure log2FoldChange and padj are numeric
+  volcano_dat$log2FoldChange <- as.numeric(volcano_dat$log2FoldChange)
+  volcano_dat$padj           <- as.numeric(volcano_dat$padj)
+  ## Add the Expression column based on thresholds
+  volcano_dat <- volcano_dat %>%
+    mutate(Expression = case_when(
+      log2FoldChange >= log2FoldChange_t[2] & padj <= padj_t ~ "Up-regulated",
+      log2FoldChange <= log2FoldChange_t[1] & padj <= padj_t ~ "Down-regulated",
+      TRUE ~ "Unchanged"
+    ))
+  ## Create dataframe containing only the information above DEGs
+  df_degs <- df_degs <- volcano_dat %>%
+    filter(Expression %in% c("Up-regulated", "Down-regulated"))
+  ## Extract information
+  num_upregulated   <- table(volcano_dat$Expression)["Up-regulated"]
+  num_downregulated <- table(volcano_dat$Expression)["Down-regulated"]
+  num_unchanged     <- table(volcano_dat$Expression)["Unchanged"]
+  ## Select the top genes based on absolute log2FoldChange and p-value
+  top_genes <- volcano_dat %>%
+    filter(Expression != "Unchanged") %>%
+    arrange(padj, desc(abs(log2FoldChange))) %>%
+    head(top_n)
+  ## Create the volcano plot
+  p <- ggplot(data = volcano_dat, aes(x = log2FoldChange,
+                                      y = -log10(padj),
+                                      col = Expression, label = rownames(volcano_dat))) +
+    geom_point() + 
+    theme_minimal() +
+    scale_color_manual(values = c("Down-regulated" = "green",
+                                  "Unchanged" = "grey",
+                                  "Up-regulated" = "red")) +
+    geom_vline(xintercept = c(log2FoldChange_t[1], log2FoldChange_t[2]), col = "black") +
+    geom_hline(yintercept = -log10(padj_t), col = "black") +
+    ggtitle("Volcano Plot") +
+    ## Add the subtitle with dynamic values
+    ## Total, inserire il numero di geni iniziale
+    ## input genes for DEG: 15880
+    labs(subtitle = glue("Total Number of Genes: {55773}
+                          Input Genes for DEGs: {nrow(res_1)}
+                          Up-regulated: {num_upregulated}
+                          Down-regulated: {num_downregulated}
+                          Unchanged: {num_unchanged}")) +
+    ## Add gene labels for the top genes
+    geom_text_repel(data = top_genes, aes(label = rownames(top_genes)),
+                    size = 3, max.overlaps = 10)
+  ## Return the plot
+  return(list(plot = p, volcano_data = volcano_dat, degs_data = df_degs))
+}
+
+
+## 05 - Define a function that computes the hubs of the network
+compute_adjacency <- function(data, cor_type = NULL){
+  ## Input:  Expression Data
+  ## Output: Adjacency matrix
+  
+  ## Correlation matrix 
+  cor_mat       <- cor(t(data), method = cor_type)
+  diag(cor_mat) <- 0
+  ## Correlation matrix (p-value)
+  cor_padj <- corr.p(cor_mat, nrow(cor_mat),
+                     adjust = "fdr", ci = FALSE)$p
+  cor_padj[lower.tri(cor_padj)] <- t(cor_padj)[lower.tri(cor_padj)]
+  ## Build adjacency matrix
+  adj_mat_1 <- ifelse(cor_mat >= 0.7, 1,
+                      ifelse(cor_mat <= -0.7,-1, 0))
+  adj_mat_2 <- ifelse(abs(cor_padj) > 0.05, 0, 1) 
+  adj_mat   <- adj_mat_1 * adj_mat_2
+  ## Return
+  return(adj_mat)
+}
+
+
+## 06 - Define a function that returns the list of the hubs
+compute_hubs <- function(adj_matrix, mart = mart_names){
+  ## Input: Adjacency Matrix, mart
+  ## Output: List of hubs, Degree, Level of quantile
+  
+  ## Compute degree
+  degree <- sort(rowSums(abs(adj_matrix)), decreasing = TRUE)
+  ## Compute quantile
+  q_95 <- quantile(degree[degree > 0], 0.95)
+  ## Find the hubs (5% of the nodes with highest degree values)
+  hubs <- degree[degree >= q_95]
+  ## Let's order them by degree
+  hubs_ord <- sort(hubs, decreasing = TRUE)
+  ## Check names
+  final_hubs <- hubs_ord
+  ## Return
+  return(list("code_hubs" = hubs,
+              "final_hubs" = final_hubs,
+              "degree" = degree,
+              "q_95" = q_95))
+}
+
+
+## 07 - Define a function that plot the network with the hubs
+plot_graph <- function(net, hubs, title, subtitle = NULL){
+  ## Input:  Network, Hubs, Title, Subtitle
+  ## Output: Network Plot
+  
+  ## Get Names
+  net %v% "type"  <- ifelse(network.vertex.names(net) %in%
+                              names(hubs),
+                            "hub", "non-hub")
+  net %v% "color" <- ifelse(net %v% "type" == "hub",
+                            "red", "blue")
+  # set_edge_attr(net, "edgecolor",
+  #               ifelse(get.edge.value(net_resistant, "weights") > 0, "green", "blue"))
+
+  ## Get vertex
+  coord <- gplot.layout.fruchtermanreingold(net, NULL)
+  net %v% "x" = coord[, 1]
+  net %v% "y" = coord[, 2]
+
+  ## Return Plot
+  ggnet2(net, color = "color", alpha = 0.7, size = 2,
+         mode = c("x","y"),
+         #edge.color = "",
+         edge.alpha = 1,
+         edge.size = 0.15) + guides(size = "none") +
+    ggtitle(title,
+            subtitle = subtitle)
+}
+
+## 08 - Define a function to automate volcano plot generation and output summary
+generate_volcano <- function(t, res, padj_t = 0.05, top_n = 50) {
+  ## Ensure that the threshold 't' is given in a vector with two values, negative and positive.
+  log2FoldChange_t <- c(-abs(t), abs(t))
+  ## Call the volcano_plot function to generate the plot and DEG data
+  result <- volcano_plot(res = res, log2FoldChange_t = log2FoldChange_t,
+                         padj_t = padj_t, top_n = top_n)
+  ## Extract the plot, volcano data, and DEGs data
+  volcano_plot_result <- result$plot
+  volcano_data        <- result$volcano_data
+  volcano_degs        <- result$degs_data
+  ## Create a table of the 'Expression' column (Up/Down/Unchanged regulation)
+  expression_summary <- table(volcano_degs$Expression)
+  ## Return a list containing the results: plot, data, DEGs, and the expression summary table
+  return(list(plot = volcano_plot_result,
+              volcano_data = volcano_data,
+              degs_data = volcano_degs,
+              expression_table = expression_summary))
+}
+
+## 09 - Define a function that is able to make kruksal test among all genes
+kruskal_test_on_genes <- function(df, condition_col) {
+  ## Get the column names excluding the condition variable
+  gene_columns <- setdiff(names(df), condition_col)
+  ## Initialize an empty vector to store p-values
+  p_values <- numeric(length(gene_columns))
+  ## Iterate through each gene (column) in the dataframe and apply kruskal.test
+  for (i in seq_along(gene_columns)) {
+    gene <- gene_columns[i]
+    formula <- as.formula(paste(gene, "~", condition_col))  ## Create formula for kruskal.test
+    test_result <- kruskal.test(formula, data = df)  ## Perform the test
+    p_values[i] <- test_result$p.value  ## Store the p-value
+  }
+  ## Create a dataframe with gene names as rownames and p-values as the column
+  result_df <- data.frame(p_value = p_values, row.names = gene_columns)
+  return(result_df)
+}
+
+## 10 - Define a function to implement Kruskal-Wallis test, create horizontal boxplots with transformations, and track progress with real-time plotting
+plot_kruskal_boxplot <- function(df, condition_col) {
+  ## Exclude the "ID" and "Mean" columns if they exist
+  df <- df %>%
+    dplyr::select(-ID, -sample, -OS.time, -OS)
+  ## Get the column names of the dataframe, excluding the condition column
+  gene_cols <- setdiff(names(df), condition_col)
+  ## Initialize an empty list to store plots
+  plot_list <- list()
+  ## Total number of genes
+  total_genes <- length(gene_cols)
+  ## Start the timer to track how long the process takes
+  start_time <- Sys.time()
+  ## Loop through each gene column to run Kruskal-Wallis test and create boxplots
+  for (i in seq_along(gene_cols)) {
+    gene <- gene_cols[i]
+    ## Run Kruskal-Wallis test
+    kruskal_test <- kruskal.test(df[[gene]] ~ df[[condition_col]])
+    ## Create horizontal boxplot using ggplot2
+    p <- ggplot(df, aes(y = .data[[condition_col]], x = .data[[gene]])) +  
+      geom_boxplot(aes(fill = .data[[condition_col]]), alpha = 0.5) +
+      geom_violin(aes(fill = .data[[condition_col]]), alpha = 0.5) +
+      labs(title = paste("Kruskal-Wallis Test p-value:", signif(kruskal_test$p.value, 3)),
+           x = gene, y = condition_col) +
+      theme_minimal() +
+      theme(legend.position = "none")  ## Hide legend if condition column is used as color
+    ## Add plot to the list
+    plot_list[[gene]] <- p
+    ## Calculate the elapsed time so far
+    elapsed_time <- Sys.time() - start_time
+    elapsed_time <- as.numeric(elapsed_time, units = "secs")
+    ## Estimate time per gene
+    time_per_gene <- elapsed_time / i
+    estimated_total_time <- time_per_gene * total_genes
+    remaining_time <- estimated_total_time - elapsed_time
+    ## Print progress in the console with estimated remaining time
+    cat("\rProcessed gene:", gene, "-", i, "of", total_genes, "- Remaining:", total_genes - i, "\n")
+    cat("Elapsed time:", round(elapsed_time, 2), "seconds", 
+        "- Estimated remaining time:", round(remaining_time, 2), "seconds\n")
+    cat("\n")
+  }
+  ## Return the list of plots
+  return(plot_list)
+}
+
+## 11 - ## Define a function that performs Wilcoxon proportional hazards regression on all genes
+wilcox_regression_on_genes <- function(df, time_col, status_col, condition_col) {
+  ## Get the column names excluding the condition, time, and status variables
+  gene_columns <- setdiff(names(df), c(condition_col, time_col, status_col))
+  ## Initialize an empty vector to store p-values
+  p_values <- numeric(length(gene_columns))
+  ## Iterate through each gene (column) in the dataframe and apply coxph
+  for (i in seq_along(gene_columns)) {
+    gene <- gene_columns[i]
+    ## Create formula for coxph using the Surv function
+    formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~", gene, "+",
+                                condition_col))
+    ## Perform the Wilcoxon proportional hazards regression
+    wilcox_result <- wilcox.test(formula, data = df)
+    ## Extract the p-value for the gene
+    p_values[i] <- summary(wilcox_result)$coefficients[1, "Pr(>|z|)"]
+  }
+  ## Create a dataframe with gene names as rownames and p-values as the column
+  result_df <- data.frame(p_value = p_values, row.names = gene_columns)
+  return(result_df)
+}
+
+## 12 - Define a function to implement Wilcoxon test, create horizontal boxplots with transformations, and track progress with real-time plotting
+plot_wilcox_boxplot <- function(df, condition_col) {
+  ## Exclude the "ID" and other irrelevant columns if they exist
+  df <- df %>%
+    dplyr::select(-ID, -OS_time, -OS_Event, -PFS_time, -PFS_event,
+                  -Coorte, -CT1L_1SI, -CT1L_FLOT_1SI)
+  ## Get the column names of the dataframe, excluding the condition column
+  gene_cols <- setdiff(names(df), condition_col)
+  ## Initialize an empty list to store plots
+  plot_list <- list()
+  ## Total number of genes
+  total_genes <- length(gene_cols)
+  ## Start the timer to track how long the process takes
+  start_time <- Sys.time()
+  ## Loop through each gene column to run Wilcoxon test and create boxplots
+  for (i in seq_along(gene_cols)) {
+    gene <- gene_cols[i]
+    ## Run Wilcoxon test
+    wilcox_test <- wilcox.test(df[[gene]] ~ df[[condition_col]])
+    ## Create horizontal boxplot using ggplot2
+    p <- ggplot(df, aes(y = .data[[condition_col]], x = .data[[gene]])) +  
+      geom_boxplot(aes(fill = .data[[condition_col]]), alpha = 0.5) +
+      geom_violin(aes(fill = .data[[condition_col]]), alpha = 0.5) +
+      labs(title = paste("Wilcoxon Test p-value:", signif(wilcox_test$p.value, 3)),
+           x = gene, y = condition_col) +
+      theme_minimal() +
+      theme(legend.position = "none")  ## Hide legend if condition column is used as color
+    ## Add plot to the list
+    plot_list[[gene]] <- p
+    ## Calculate the elapsed time so far
+    elapsed_time <- Sys.time() - start_time
+    elapsed_time <- as.numeric(elapsed_time, units = "secs")
+    ## Estimate time per gene
+    time_per_gene <- elapsed_time / i
+    estimated_total_time <- time_per_gene * total_genes
+    remaining_time <- estimated_total_time - elapsed_time
+    ## Print progress in the console with estimated remaining time
+    cat("\rProcessed gene:", gene, "-", i, "of", total_genes, "- Remaining:", total_genes - i, "\n")
+    cat("Elapsed time:", round(elapsed_time, 2), "seconds", 
+        "- Estimated remaining time:", round(remaining_time, 2), "seconds\n")
+    cat("\n")
+  }
+  ## Return the list of plots
+  return(plot_list)
+}
+
+## 13 - Define the function for survival analysis and plotting (OS only)
+survival_gene_os_only <- function(df, os_time_col, os_event_col, condition_col) {
+  ## Initialize an empty dataframe with column names but no rows
+  res <- data.frame(Gene = character(),
+                    OS_p_value = numeric(),
+                    stringsAsFactors = FALSE)
+  ## Extract the gene columns (excluding survival columns and Condition)
+  gene_cols <- setdiff(names(df), c(os_time_col, os_event_col, condition_col))
+  ## Total number of genes
+  total_genes <- length(gene_cols)
+  ## Record start time
+  start_time <- Sys.time()
+  ## Loop through each gene column to perform survival analysis
+  for (i in seq_along(gene_cols)){
+    gene <- gene_cols[i]
+    ## Create the formula dynamically using the gene and condition columns
+    formula_os <- as.formula(paste("Surv(", os_time_col, ",",
+                                   os_event_col, ") ~", condition_col))
+    ## Define OS survival fit using the dynamically created formula
+    fit_os <- survfit(formula_os, data = df)
+    ## Get p-values for OS using the log-rank test
+    pval_os  <- surv_pvalue(fit_os)$pval
+    ## Only add to the results dataframe if p-values are available
+    if (!is.na(pval_os)) {
+      res <- rbind(res, data.frame(Gene = gene, OS_p_value = pval_os))
+    }
+    ## Generate OS Plot
+    ggsurv_os <- ggsurvplot(fit_os, data = df,
+                            pval = TRUE, conf.int = TRUE, palette = c("#E7B800", "#2E9FDF"),
+                            xlim = c(0, 170), xlab = "Time in Days", break.time.by = 100,
+                            ggtheme = theme_light(), risk.table.y.text.col = TRUE,
+                            risk.table.height = 0.25, risk.table.y.text = FALSE,
+                            conf.int.style = "step", surv.median.line = "hv")$plot +
+      ggtitle(paste("Overall Survival for", gene))
+    ## Show the plot
+    print(ggsurv_os)
+    ## Estimate remaining time
+    current_time <- Sys.time()
+    elapsed_time <- current_time - start_time
+    elapsed_time <- as.numeric(elapsed_time, units = "secs")
+    ## Estimate time per gene
+    avg_time_per_gene <- elapsed_time / i
+    remaining_genes <- total_genes - i
+    est_remaining_time <- remaining_genes * avg_time_per_gene
+    ## Print Progress
+    cat(sprintf("\rProcessed gene %d/%d (%.2f%%). Estimated remaining time: %.2f seconds.\n",
+                i, total_genes, (i / total_genes) * 100, est_remaining_time))
+    
+  }
+  return(res)
+}
+
+## 14 - Define a function to perform survival analysis with different threshold for signature
+perform_survival_analysis <- function(t, df_1, df_2, max_months) {
+  ## Apply thresholding to both TPM datasets
+  ## Own TPM
+  mat_own_tpm_transposed <- df_1 %>%
+    mutate(Signature = case_when(Genes >= t ~ "High",
+                                 Genes <= -t ~ "Low",
+                                 TRUE ~ "Medium"))
+  ## TCGA TPM         
+  mat_tcga_tpm_transposed <- df_2 %>%
+    mutate(Signature = case_when(Genes >= t ~ "High",
+                                 Genes <= -t ~ "Low",
+                                 TRUE ~ "Medium"))
+  ## Wrangling for survival analysis
+  ## TCGA Tpm
+  mat_tcga_tpm_transposed$ID <- rownames(mat_tcga_tpm_transposed)
+  mat_tcga_tpm_transposed_merged <- merge(mat_tcga_tpm_transposed, df_survival_tcga, by = "ID")
+  mat_tcga_tpm_transposed_merged$OS.time.month <- mat_tcga_tpm_transposed_merged$OS.time / 30
+  ## Own TPM
+  mat_own_tpm_transposed$ID <- rownames(mat_own_tpm_transposed)
+  mat_own_tpm_transposed$ID <- gsub("\\.1T$", "", mat_own_tpm_transposed$ID)
+  mat_own_tpm_transposed$ID <- gsub("\\.", "-", mat_own_tpm_transposed$ID)
+  mat_own_tpm_transposed_merged <- merge(mat_own_tpm_transposed, df_survival_own, by = "ID")
+  ## Check distribution
+  ## Own Tpm
+  p1 <- ggplot(mat_own_tpm_transposed, aes(x = Genes, y = after_stat(count))) +
+    geom_histogram(fill = "orange", color = "white", bins = 30) +
+    ggtitle("Signature Distribution Own TPM") +
+    xlab("") +
+    ylab("Count") +
+    theme_minimal()
+  ## TCGA
+  p2 <- ggplot(mat_tcga_tpm_transposed, aes(x = Genes, y = after_stat(count))) +
+    geom_histogram(fill = "orange", color = "white", bins = 30) +
+    ggtitle("Signature Distribution TCGA TPM") +
+    xlab("") +
+    ylab("Count") +
+    theme_minimal()
+  ## Plotting the OS Status distribution
+  p3 <- ggplot(mat_own_tpm_transposed_merged, aes(x = Signature)) +
+    geom_bar(fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_text(aes(label = paste0(after_stat(count), " (",
+                                 round(after_stat(count) / sum(after_stat(count)) * 100, 1), "%)")),
+              stat = "count", vjust = -0.5) +
+    labs(title = "OS Status Distribution Own TPM", x = "", y = "Count") +
+    theme_minimal() 
+  p4 <- ggplot(mat_tcga_tpm_transposed_merged, aes(x = Signature)) +
+    geom_bar(fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_text(aes(label = paste0(after_stat(count), " (",
+                                 round(after_stat(count) / sum(after_stat(count)) * 100, 1), "%)")),
+              stat = "count", vjust = -0.5) +
+    labs(title = "OS Status Distribution TCGA TPM", x = "", y = "Count") +
+    theme_minimal() 
+  ## Survival Analysis - OWN TPM
+  fit_os_own <- survfit(Surv(OS_time, as.integer(OS_Event)) ~ Signature,
+                        data = mat_own_tpm_transposed_merged)
+  os_plot_own <- ggsurvplot(fit_os_own, data = mat_own_tpm_transposed_merged,
+                            risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                            palette = c("#F39C12", "#3498DB", "#E74C3C"),
+                            xlim = c(0, max_months),
+                            title = "Overall Survival Analysis Own TPM",
+                            subtitle = paste0("Top Genes, t:", t),
+                            xlab = "Time in Months",  ylab = "OS Probability",
+                            break.time.by = 4, ggtheme = theme_light(), 
+                            risk.table.y.text.col = TRUE, risk.table.height = 0.25,
+                            risk.table.y.text = TRUE, conf.int.style = "step",
+                            surv.median.line = "hv")
+  ## Progression Free Survival - OWN TPM
+  fit_pfs_own <- survfit(Surv(PFS_time, as.integer(PFS_event)) ~ Signature,
+                         data = mat_own_tpm_transposed_merged)
+  pfs_plot_own <- ggsurvplot(fit_pfs_own, data = mat_own_tpm_transposed_merged,
+                             risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                             palette = c("#F39C12", "#3498DB", "#E74C3C"),
+                             xlim = c(0, max_months),
+                             title = "Progression Free Survival Analysis Own TPM",
+                             subtitle = paste0("Top Genes, t:", t),
+                             xlab = "Time in Months",  ylab = "PFS Probability",
+                             break.time.by = 4, ggtheme = theme_light(), 
+                             risk.table.y.text.col = TRUE, risk.table.height = 0.25,
+                             risk.table.y.text = TRUE, conf.int.style = "step",
+                             surv.median.line = "hv")
+  ## Survival Analysis - TCGA TPM
+  fit_os_tcga <- survfit(Surv(OS.time.month, as.integer(OS)) ~ Signature,
+                         data = mat_tcga_tpm_transposed_merged)
+  os_plot_tcga <- ggsurvplot(fit_os_tcga, data = mat_tcga_tpm_transposed_merged,
+                             risk.table = TRUE, pval = TRUE, conf.int = FALSE,
+                             palette = c("#F39C12", "#3498DB", "#E74C3C"),
+                             xlim = c(0, max_months),
+                             title = "Overall Survival Analysis TCGA TPM",
+                             subtitle = paste0("Top Genes, t:", t),
+                             xlab = "Time in Months",  ylab = "OS Probability",
+                             break.time.by = 4, ggtheme = theme_light(), 
+                             risk.table.y.text.col = TRUE, risk.table.height = 0.25,
+                             risk.table.y.text = TRUE, conf.int.style = "step",
+                             surv.median.line = "hv")
+  ## Plot everything together
+  grid.arrange(p1, p3, os_plot_own$plot, pfs_plot_own$plot,
+               p2, p4, os_plot_tcga$plot,
+               ncol = 4)
+}
+
+## 15 - SSGSEA computation
+ssgsea <- function(X, gene_sets, alpha = 0.25, scale = T, norm = F, single = T) {
+  row_names <- rownames(X)
+  num_genes <- nrow(X)
+  gene_sets <- lapply(gene_sets, function(genes) {which(row_names %in% genes)})
+  ## Ranks for genes
+  R <- matrixStats::colRanks(X, preserveShape = T, ties.method = "average")
+  ## Calculate enrichment score (es) for each sample (column)
+  es <- apply(R, 2, function(R_col) {
+    gene_ranks = order(R_col, decreasing = TRUE)
+    ## Calc es for each gene set
+    es_sample = sapply(gene_sets, function(gene_set_idx) {
+      ## pos: match (within the gene set)
+      ## neg: non-match (outside the gene set)
+      indicator_pos = gene_ranks %in% gene_set_idx
+      indicator_neg = !indicator_pos
+      rank_alpha  = (R_col[gene_ranks] * indicator_pos) ^ alpha
+      step_cdf_pos = cumsum(rank_alpha)    / sum(rank_alpha)
+      step_cdf_neg = cumsum(indicator_neg) / sum(indicator_neg)
+      step_cdf_diff = step_cdf_pos - step_cdf_neg
+      ## Normalize by gene number
+      if (scale) step_cdf_diff = step_cdf_diff / num_genes
+      ## Use ssGSEA or not
+      if (single) {
+        sum(step_cdf_diff)
+      } else {
+        step_cdf_diff[which.max(abs(step_cdf_diff))]
+      }
+    })
+    unlist(es_sample)
+  })
+  if (length(gene_sets) == 1) es = matrix(es, nrow = 1)
+  ## Normalize by absolute diff between max and min
+  if (norm) es = es / diff(range(es))
+  ## Prepare output
+  rownames(es) = names(gene_sets)
+  colnames(es) = colnames(X)
+  return(es)
+}
