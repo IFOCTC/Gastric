@@ -15,13 +15,16 @@ df_mutations_met            <- read.delim(paste0(data_path_mutations, "/data_mut
                                       header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 ## TCGA
 df_signature_tcga            <- read.csv(paste0(data_path_tcga, "/TCGA_Signature.csv"))
-query <- GDCquery(project = c("TCGA-STAD"), data.category = "Simple Nucleotide Variation", 
-                  access = "open", data.type = "Masked Somatic Mutation", 
-                  workflow.type = "Aliquot Ensemble Somatic Variant Merging and Masking")
-GDCdownload(query)
-df_maf_tcga <- GDCprepare(query)
-## Write csv
-## write.csv(paste0(data_path_tcga, "/df_maf_tcga.csv"))
+# query <- GDCquery(project = c("TCGA-STAD"), data.category = "Simple Nucleotide Variation", 
+#                   access = "open", data.type = "Masked Somatic Mutation", 
+#                   workflow.type = "Aliquot Ensemble Somatic Variant Merging and Masking")
+# GDCdownload(query)
+# df_maf_tcga <- GDCprepare(query)
+# ## Write csv
+# write.csv(df_maf_tcga, file = paste0(data_path_tcga, "/df_maf_tcga.csv"), row.names = TRUE)
+## Load data
+df_maf_tcga <- read.csv(paste0(data_path_tcga, "/df_maf_tcga.csv"))
+df_maf_tcga$X <- NULL
 
 ## Wrangling
 df_mutated_genes_met$Freq <- sort(df_mutated_genes_met$Freq, decreasing = TRUE)
@@ -76,19 +79,6 @@ df_final_long <- df_final %>%
   tidyr::pivot_longer(cols = -c(Patient_ID, Signature, Genes), names_to = "Gene", values_to = "Value")
 df_final_long$Value <- factor(df_final_long$Value, levels = c(0, 1))
 
-## Plot
-ggplot(df_final_long, aes(x = Gene, y = after_stat(count), fill = factor(Value))) +
-  geom_bar(position = "dodge") +  
-  scale_fill_manual(values = c("1" = "#D55E00", "0" = "#0072B2"), 
-                    name = "Value", labels = c("0", "1")) + 
-  labs(title = "Gene Mutations by Signature", x = "Gene",  y = "Count [%]") +
-  theme_minimal(base_size = 14) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), 
-        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-        legend.position = "top") + 
-  guides(fill = guide_legend(title = "Mutation Status")) + 
-  theme(axis.title.y = element_text(size = 12), axis.title.x = element_text(size = 12))
-
 ## Plot only mutated
 df_final_long_1 <- df_final_long %>%
   filter(Value == 1)
@@ -103,24 +93,6 @@ ggplot(df_final_long_1, aes(x = Gene, y = after_stat(count), fill = factor(Signa
         plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
         legend.position = "top") + 
   guides(fill = guide_legend(title = "Signatue Status")) + 
-  theme(axis.title.y = element_text(size = 12), axis.title.x = element_text(size = 12))
-
-## Create percentage df
-df_percentage <- df_final_long %>% 
-  group_by(Gene, Signature) %>% 
-  summarize(percentage = mean(as.numeric(Value)) * 100)
-
-## Plot
-ggplot(df_percentage, aes(x = Gene, y = percentage, fill = factor(Signature))) +
-  geom_bar(position = "dodge", stat = "identity") +  
-  scale_fill_manual(values = c("High" = "#D55E00", "Low" = "#0072B2"), 
-                    name = "Value", labels = c("Low", "High")) + 
-  labs(title = "Gene Mutations by Signature", x = "Gene",  y = "Count [%]") +
-  theme_minimal(base_size = 14) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), 
-        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-        legend.position = "top") + 
-  guides(fill = guide_legend(title = "Signature")) + 
   theme(axis.title.y = element_text(size = 12), axis.title.x = element_text(size = 12))
 
 ## Fisher Test
@@ -142,8 +114,10 @@ for (gene in colnames(df_final_test[-1])) {
     fisher_test <- fisher.test(contingency_table)
     ## Store the gene name, p-value, and odds ratio (from the test result)
     fisher_res <- rbind(fisher_res, data.frame(Gene = gene, 
-                                               P_value = fisher_test$p.value, 
+                                               P_value = fisher_test$p.value,
+                                               NegLogPValue = -log10(fisher_test$p.value),
                                                Odds_Ratio = fisher_test$estimate))
+    rownames(fisher_res) <- NULL
   } else {
     ## If the contingency table is not valid, print a message or skip
     message(paste("Skipping gene", gene, "due to insufficient variation"))
@@ -153,26 +127,50 @@ for (gene in colnames(df_final_test[-1])) {
 ## Optionally, you can filter the results to see only significant genes
 significant_genes <- fisher_res[fisher_res$P_value <= 0.05, ]
 
-## View the results
-View(fisher_res)
-
-## Volcano plot
-fisher_res$NegLogPValue <- -log10(fisher_res$P_value)
-
 ## Add color specification
 fisher_res$in_list <- ifelse(fisher_res$Gene %in% genes, "In List", "Not in List")
+## Add Significance specification
+fisher_res$Significance_P_value <- ifelse(fisher_res$P_value <= 0.05, "Significant", "Not Significance")
+fisher_res$Significance_Odds_Ratio <- ifelse(fisher_res$Odds_Ratio >= 1, "OR >= 1", "OR < 1")
+## Add Association specification
+fisher_res <- fisher_res %>%
+  mutate(Association = case_when(
+    Significance_P_value == "Significant" & Significance_Odds_Ratio == "OR >= 1" ~ "Positive",
+    Significance_P_value == "Significant" & Significance_Odds_Ratio == "OR < 1" ~ "Negative",
+    TRUE ~ "N.S."))
+
+## Cap Inf values
+fisher_res$Odds_Ratio <- ifelse(is.infinite(fisher_res$Odds_Ratio), 20, fisher_res$Odds_Ratio)
 
 ## Plot
 ggplot(fisher_res, aes(x = Odds_Ratio, y = NegLogPValue)) +
-  geom_point(aes(color = in_list), alpha = 0.7) +
-  scale_color_manual(name = "Gene List",
-                     values = c("In List" = "red", "Not in List" = "gray"),
-                     labels = c("In List", "Not in List")) +
-  labs(x = "Odds Ratio", y = "-log10(P-value)", title = "Fisher's Test") +
+  geom_point(aes(color = factor(
+    ifelse(P_value > 0.05, "N.S.", ifelse(Odds_Ratio > 1, "Positive", "Negative")), 
+    levels = c("Positive", "Negative", "N.S."))), alpha = 0.7) +
+  scale_color_manual(name = "Association",  values = c("Positive" = "#E74C3C",
+                                                       "Negative" = "#3498DB",  
+                                                       "N.S." = "gray")) +
+  labs(x = "Odds Ratio", y = "-log10(P-value)", title = "Fisher's Test",
+       subtitle = "Associations of genes with P-value threshold and Odds Ratios") +
   theme_minimal() +
-  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
-  geom_text(aes(label = ifelse(Gene %in% genes, as.character(Gene), "")), 
-            vjust = -0.5, size = 3, check_overlap = FALSE) +
-  geom_vline(xintercept = 0, linetype = "dashed")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),  
+        axis.ticks.x = element_line()) +
+  # geom_text(aes(label = ifelse(P_value <= 0.05, as.character(Gene), "")),
+  #           vjust = -0.5, size = 3, check_overlap = TRUE) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 6),
+                     labels = scales::comma_format())
+
+## Extract Positive and Negative Association genes
+positive_genes <- fisher_res %>%
+  filter(P_value <= 0.05, Odds_Ratio >= 1) %>%
+  pull(Gene)
+negative_genes <- fisher_res %>%
+  filter(P_value <= 0.05, Odds_Ratio < 1) %>%
+  pull(Gene)
+## Check
+print(positive_genes);length(positive_genes)
+print(negative_genes);length(negative_genes)
+
 
 
